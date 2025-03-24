@@ -1,4 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-video">
-  <path d="m22 8-6 4 6 4V8Z"/>
-  <rect width="14" height="12" x="2" y="6" rx="2" ry="2"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800px" height="800px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <path fill="#0F172A" d="M12,8a4,4,0,1,0,4,4A4,4,0,0,0,12,8Zm0,6a2,2,0,1,1,2-2A2,2,0,0,1,12,14Z"/>
+  <path fill="#0F172A" d="M21.294,8.291A1,1,0,0,0,20.7,8.08L17,10.085V10a3,3,0,0,0-3-3H4a3,3,0,0,0-3,3v6a3,3,0,0,0,3,3H14a3,3,0,0,0,3-3v-.085l3.705,2.005A1,1,0,0,0,22,17V9A1,1,0,0,0,21.294,8.291ZM15,16a1,1,0,0,1-1,1H4a1,1,0,0,1-1-1V10A1,1,0,0,1,4,9H14a1,1,0,0,1,1,1Zm5-.387-3-1.624v-2.6l3-1.624Z"/>
 </svg>
