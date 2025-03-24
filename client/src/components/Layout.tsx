@@ -8,6 +8,18 @@ interface LayoutProps {
 export function Layout({ children }: LayoutProps) {
   const [location] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const [currentTime, setCurrentTime] = React.useState(new Date());
+
+  // Update the time every minute
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000);
+    
+    return () => {
+      clearInterval(timer);
+    };
+  }, []);
 
   const navItems = [
     {
@@ -126,18 +138,30 @@ export function Layout({ children }: LayoutProps) {
           <div className="flex h-16 justify-between">
             <div className="flex">
               <div className="flex flex-shrink-0 items-center">
-                <img
-                  src="/camera-icon.svg"
-                  alt="Camera System Logo"
-                  className="h-8 w-8"
-                />
-                <span className="ml-2 text-xl font-bold text-gray-900">
+                <Link href="/">
+                  <img
+                    src="/camera-icon.svg"
+                    alt="Camera System Logo"
+                    className="h-8 w-8 transition-transform duration-300 hover:scale-110"
+                  />
+                </Link>
+                <Link href="/" className="ml-2 text-xl font-bold text-gray-900 hover:text-blue-600 transition-colors duration-200">
                   Camera System
-                </span>
+                </Link>
               </div>
             </div>
             <div className="hidden sm:ml-6 sm:flex sm:items-center space-x-4">
-              <div className="text-sm text-gray-500">Welcome, Admin</div>
+              <div className="text-sm text-gray-600 font-medium">
+                {currentTime.toLocaleString('en-US', { 
+                  weekday: 'short', 
+                  year: 'numeric', 
+                  month: 'short', 
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </div>
+              <div className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">Welcome, Admin</div>
             </div>
             <div className="-mr-2 flex items-center sm:hidden">
               <button
@@ -201,21 +225,31 @@ export function Layout({ children }: LayoutProps) {
               <Link 
                 href={item.path} 
                 key={item.name}
-                className={`group flex items-center px-2 py-3 text-sm font-medium rounded-md sidebar-link ${
+                className={`group flex items-center px-3 py-3 text-sm font-medium rounded-md sidebar-link transition-all duration-200 ${
                   location === item.path
-                    ? 'bg-blue-50 text-blue-700'
+                    ? 'bg-blue-50 text-blue-700 shadow-sm'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                 }`}
               >
-                <span className="mr-3">{item.icon}</span>
+                <span className={`mr-3 transition-colors duration-200 ${
+                  location === item.path ? 'text-blue-500' : 'text-gray-500 group-hover:text-blue-500'
+                }`}>{item.icon}</span>
                 {item.name}
               </Link>
             ))}
           </nav>
+          
+          {/* System status indicator */}
+          <div className="absolute bottom-0 left-0 w-64 p-4 border-t">
+            <div className="flex items-center text-sm">
+              <div className="h-2 w-2 rounded-full bg-green-500 mr-2"></div>
+              <span className="text-gray-600">System Status: Online</span>
+            </div>
+          </div>
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8 bg-gray-50">
           {children}
         </main>
       </div>
