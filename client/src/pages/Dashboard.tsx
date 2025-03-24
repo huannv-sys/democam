@@ -133,10 +133,8 @@ export default function Dashboard() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Camera Status</h2>
-          <Link href="/cameras">
-            <a className="text-sm text-blue-600 hover:underline">
-              View All Cameras
-            </a>
+          <Link href="/cameras" className="text-sm text-blue-600 hover:underline">
+            View All Cameras
           </Link>
         </div>
         
@@ -170,9 +168,7 @@ export default function Dashboard() {
             <CardContent className="p-6 text-center">
               <p>No cameras configured yet.</p>
               <Link href="/cameras">
-                <a>
-                  <Button className="mt-4">Add Your First Camera</Button>
-                </a>
+                <Button className="mt-4">Add Your First Camera</Button>
               </Link>
             </CardContent>
           </Card>
@@ -183,10 +179,8 @@ export default function Dashboard() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Recent Alerts</h2>
-          <Link href="/alerts">
-            <a className="text-sm text-blue-600 hover:underline">
-              View All Alerts
-            </a>
+          <Link href="/alerts" className="text-sm text-blue-600 hover:underline">
+            View All Alerts
           </Link>
         </div>
         
@@ -205,9 +199,7 @@ export default function Dashboard() {
                       </p>
                     </div>
                     <Link href={`/alerts/${alert.id}`}>
-                      <a>
-                        <Button variant="outline">View</Button>
-                      </a>
+                      <Button variant="outline">View</Button>
                     </Link>
                   </div>
                 ))}
