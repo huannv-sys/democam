@@ -2,72 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="/camera-icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Camera Surveillance System</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <style>
-      /* Custom styling for video elements */
-      .video-feed {
-        background-color: #101827;
-        position: relative;
-        overflow: hidden;
-      }
-
-      /* Timeline scrubber styling */
-      .timeline {
-        height: 60px;
-        cursor: pointer;
-        position: relative;
-      }
-
-      .timeline-marker {
-        position: absolute;
-        height: 100%;
-        width: 2px;
-        background-color: #d97706;
-        top: 0;
-        left: 50%;
-        z-index: 10;
-      }
-
-      /* Custom scrollbar for timeline */
-      .timeline-scroll::-webkit-scrollbar {
-        height: 8px;
-      }
-
-      .timeline-scroll::-webkit-scrollbar-track {
-        background: #e5e7eb;
-        border-radius: 4px;
-      }
-
-      .timeline-scroll::-webkit-scrollbar-thumb {
-        background-color: #6b7280;
-        border-radius: 4px;
-      }
-
-      /* Pulsing animation for motion alert */
-      @keyframes pulse {
-        0%, 100% {
-          background-color: rgba(239, 68, 68, 0.7);
-        }
-        50% {
-          background-color: rgba(239, 68, 68, 0.3);
-        }
-      }
-
-      .motion-alert {
-        animation: pulse 2s infinite;
-      }
-    </style>
+    <title>Hệ thống giám sát camera</title>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" src="/client/src/main.tsx"></script>
   </body>
 </html>

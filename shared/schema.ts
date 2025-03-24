@@ -1,82 +1,71 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
+import { z } from 'zod';
+import { createInsertSchema } from 'drizzle-zod';
 
 // Camera model
-export const cameras = pgTable("cameras", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  streamUrl: text("stream_url").notNull(),
-  status: text("status").notNull().default("offline"),
-  motionDetection: boolean("motion_detection").default(true),
-  isRecording: boolean("is_recording").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
+export const cameraSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  url: z.string(),
+  enabled: z.boolean().default(true),
+  motionDetection: z.boolean().default(true),
+  motionSensitivity: z.number().min(0).max(100).default(50),
+  recordOnMotion: z.boolean().default(true),
 });
 
-export const insertCameraSchema = createInsertSchema(cameras).omit({
-  id: true,
-  createdAt: true,
-  status: true,
-  isRecording: true
-});
-
-// Recording model
-export const recordings = pgTable("recordings", {
-  id: serial("id").primaryKey(),
-  cameraId: integer("camera_id").notNull(),
-  startTime: timestamp("start_time").notNull(),
-  endTime: timestamp("end_time"),
-  fileUrl: text("file_url"),
-  hasMotion: boolean("has_motion").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const insertRecordingSchema = createInsertSchema(recordings).omit({
-  id: true,
-  createdAt: true,
-  endTime: true,
-  fileUrl: true,
-});
-
-// Alert model
-export const alerts = pgTable("alerts", {
-  id: serial("id").primaryKey(),
-  cameraId: integer("camera_id").notNull(),
-  type: text("type").notNull(), // motion, connection, etc.
-  message: text("message").notNull(),
-  timestamp: timestamp("timestamp").notNull().defaultNow(),
-  isRead: boolean("is_read").default(false),
-  metadata: jsonb("metadata"),
-});
-
-export const insertAlertSchema = createInsertSchema(alerts).omit({
-  id: true,
-  timestamp: true,
-  isRead: true,
-});
-
-// Settings model
-export const settings = pgTable("settings", {
-  id: serial("id").primaryKey(),
-  motionSensitivity: integer("motion_sensitivity").default(50),
-  storageLimit: integer("storage_limit").default(2048), // In GB
-  retentionDays: integer("retention_days").default(30),
-  autoDelete: boolean("auto_delete").default(true),
-});
-
-export const insertSettingsSchema = createInsertSchema(settings).omit({
-  id: true,
-});
-
-// Define types for our models
-export type Camera = typeof cameras.$inferSelect;
+export type Camera = z.infer<typeof cameraSchema>;
+export const insertCameraSchema = cameraSchema.omit({ id: true });
 export type InsertCamera = z.infer<typeof insertCameraSchema>;
 
-export type Recording = typeof recordings.$inferSelect;
+// Recording model
+export const recordingSchema = z.object({
+  id: z.string(),
+  cameraId: z.string(),
+  startTime: z.date(),
+  endTime: z.date().optional(),
+  duration: z.number().optional(),
+  path: z.string(),
+  thumbnail: z.string().optional(),
+  triggeredByMotion: z.boolean().default(false),
+  motionRegion: z.object({
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number(),
+  }).optional(),
+});
+
+export type Recording = z.infer<typeof recordingSchema>;
+export const insertRecordingSchema = recordingSchema.omit({ id: true });
 export type InsertRecording = z.infer<typeof insertRecordingSchema>;
 
-export type Alert = typeof alerts.$inferSelect;
+// Alert model
+export const alertSchema = z.object({
+  id: z.string(),
+  cameraId: z.string(),
+  timestamp: z.date(),
+  type: z.enum(['MOTION', 'CONNECTION_LOST', 'CUSTOM']),
+  message: z.string(),
+  resolved: z.boolean().default(false),
+  recordingId: z.string().optional(),
+  metadata: z.record(z.any()).optional(),
+});
+
+export type Alert = z.infer<typeof alertSchema>;
+export const insertAlertSchema = alertSchema.omit({ id: true });
 export type InsertAlert = z.infer<typeof insertAlertSchema>;
 
-export type Settings = typeof settings.$inferSelect;
+// Settings model
+export const settingsSchema = z.object({
+  id: z.string().default('settings'),
+  storageLocation: z.string().default('./recordings'),
+  maxStorageSize: z.number().default(10 * 1024 * 1024 * 1024), // 10 GB
+  retentionPeriod: z.number().default(30), // days
+  defaultMotionSensitivity: z.number().min(0).max(100).default(50),
+  recordingFormat: z.enum(['MP4', 'WEBM']).default('MP4'),
+  maxConcurrentStreams: z.number().default(4),
+  notificationsEnabled: z.boolean().default(true),
+});
+
+export type Settings = z.infer<typeof settingsSchema>;
+export const insertSettingsSchema = settingsSchema.omit({ id: true });
 export type InsertSettings = z.infer<typeof insertSettingsSchema>;

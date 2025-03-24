@@ -1,212 +1,224 @@
-import { 
-  cameras, type Camera, type InsertCamera, 
-  recordings, type Recording, type InsertRecording,
-  alerts, type Alert, type InsertAlert,
-  settings, type Settings, type InsertSettings
-} from "@shared/schema";
+import { Camera, Recording, Alert, Settings, InsertCamera, InsertRecording, InsertAlert, InsertSettings } from '../shared/schema';
+import { v4 as uuidv4 } from 'uuid';
 
+// Interface for storage operations
 export interface IStorage {
   // Camera operations
   getCameras(): Promise<Camera[]>;
-  getCamera(id: number): Promise<Camera | undefined>;
-  createCamera(camera: InsertCamera): Promise<Camera>;
-  updateCamera(id: number, data: Partial<Camera>): Promise<Camera | undefined>;
-  deleteCamera(id: number): Promise<boolean>;
-  
+  getCameraById(id: string): Promise<Camera | null>;
+  createCamera(data: InsertCamera): Promise<Camera>;
+  updateCamera(id: string, data: Partial<Camera>): Promise<Camera | null>;
+  deleteCamera(id: string): Promise<boolean>;
+
   // Recording operations
-  getRecordings(cameraId?: number): Promise<Recording[]>;
-  getRecording(id: number): Promise<Recording | undefined>;
-  createRecording(recording: InsertRecording): Promise<Recording>;
-  updateRecording(id: number, data: Partial<Recording>): Promise<Recording | undefined>;
-  deleteRecording(id: number): Promise<boolean>;
-  
+  getRecordings(filters?: { cameraId?: string, startDate?: Date, endDate?: Date }): Promise<Recording[]>;
+  getRecordingById(id: string): Promise<Recording | null>;
+  createRecording(data: InsertRecording): Promise<Recording>;
+  updateRecording(id: string, data: Partial<Recording>): Promise<Recording | null>;
+  deleteRecording(id: string): Promise<boolean>;
+
   // Alert operations
-  getAlerts(cameraId?: number): Promise<Alert[]>;
-  getAlert(id: number): Promise<Alert | undefined>;
-  createAlert(alert: InsertAlert): Promise<Alert>;
-  updateAlert(id: number, data: Partial<Alert>): Promise<Alert | undefined>;
-  deleteAlert(id: number): Promise<boolean>;
-  
+  getAlerts(filters?: { cameraId?: string, resolved?: boolean, startDate?: Date, endDate?: Date }): Promise<Alert[]>;
+  getAlertById(id: string): Promise<Alert | null>;
+  createAlert(data: InsertAlert): Promise<Alert>;
+  updateAlert(id: string, data: Partial<Alert>): Promise<Alert | null>;
+  deleteAlert(id: string): Promise<boolean>;
+
   // Settings operations
   getSettings(): Promise<Settings>;
-  updateSettings(data: Partial<Settings>): Promise<Settings>;
+  updateSettings(data: InsertSettings): Promise<Settings>;
 }
 
+// In-memory storage implementation
 export class MemStorage implements IStorage {
-  private cameras: Map<number, Camera>;
-  private recordings: Map<number, Recording>;
-  private alerts: Map<number, Alert>;
+  private cameras: Camera[] = [];
+  private recordings: Recording[] = [];
+  private alerts: Alert[] = [];
   private settings: Settings;
-  
-  private cameraId: number = 1;
-  private recordingId: number = 1;
-  private alertId: number = 1;
 
   constructor() {
-    this.cameras = new Map();
-    this.recordings = new Map();
-    this.alerts = new Map();
-    
-    // Add some default cameras
-    this.createCamera({
-      name: "Main Entrance",
-      streamUrl: "rtsp://example.com/entrance",
-      motionDetection: true
-    });
-    
-    this.createCamera({
-      name: "Warehouse",
-      streamUrl: "rtsp://example.com/warehouse",
-      motionDetection: true
-    });
-    
-    this.createCamera({
-      name: "Parking Lot",
-      streamUrl: "rtsp://example.com/parking",
-      motionDetection: true
-    });
-    
-    this.createCamera({
-      name: "Back Door",
-      streamUrl: "rtsp://example.com/backdoor",
-      motionDetection: true
-    });
-    
-    // Default settings
+    // Initialize with default settings
     this.settings = {
-      id: 1,
-      motionSensitivity: 50,
-      storageLimit: 2048,
-      retentionDays: 30,
-      autoDelete: true
+      id: 'settings',
+      storageLocation: './recordings',
+      maxStorageSize: 10 * 1024 * 1024 * 1024, // 10 GB
+      retentionPeriod: 30, // days
+      defaultMotionSensitivity: 50,
+      recordingFormat: 'MP4',
+      maxConcurrentStreams: 4,
+      notificationsEnabled: true,
     };
+
+    // Add some demo cameras
+    this.cameras = [
+      {
+        id: uuidv4(),
+        name: 'Front Door',
+        url: 'https://demo.camera.stream/front-door',
+        enabled: true,
+        motionDetection: true,
+        motionSensitivity: 60,
+        recordOnMotion: true,
+      },
+      {
+        id: uuidv4(),
+        name: 'Backyard',
+        url: 'https://demo.camera.stream/backyard',
+        enabled: true,
+        motionDetection: true,
+        motionSensitivity: 50,
+        recordOnMotion: true,
+      },
+      {
+        id: uuidv4(),
+        name: 'Garage',
+        url: 'https://demo.camera.stream/garage',
+        enabled: true,
+        motionDetection: true,
+        motionSensitivity: 40,
+        recordOnMotion: true,
+      },
+    ];
   }
 
-  // Camera methods
+  // Camera operations
   async getCameras(): Promise<Camera[]> {
-    return Array.from(this.cameras.values());
+    return this.cameras;
   }
 
-  async getCamera(id: number): Promise<Camera | undefined> {
-    return this.cameras.get(id);
+  async getCameraById(id: string): Promise<Camera | null> {
+    return this.cameras.find(camera => camera.id === id) || null;
   }
 
-  async createCamera(insertCamera: InsertCamera): Promise<Camera> {
-    const id = this.cameraId++;
-    const now = new Date();
-    const camera: Camera = { 
-      ...insertCamera, 
-      id, 
-      status: "offline", 
-      isRecording: false,
-      createdAt: now
+  async createCamera(data: InsertCamera): Promise<Camera> {
+    const newCamera: Camera = {
+      id: uuidv4(),
+      ...data,
     };
-    this.cameras.set(id, camera);
-    return camera;
+    this.cameras.push(newCamera);
+    return newCamera;
   }
 
-  async updateCamera(id: number, data: Partial<Camera>): Promise<Camera | undefined> {
-    const camera = this.cameras.get(id);
-    if (!camera) return undefined;
-    
-    const updatedCamera = { ...camera, ...data };
-    this.cameras.set(id, updatedCamera);
-    return updatedCamera;
+  async updateCamera(id: string, data: Partial<Camera>): Promise<Camera | null> {
+    const index = this.cameras.findIndex(camera => camera.id === id);
+    if (index === -1) return null;
+
+    this.cameras[index] = { ...this.cameras[index], ...data };
+    return this.cameras[index];
   }
 
-  async deleteCamera(id: number): Promise<boolean> {
-    return this.cameras.delete(id);
+  async deleteCamera(id: string): Promise<boolean> {
+    const initialLength = this.cameras.length;
+    this.cameras = this.cameras.filter(camera => camera.id !== id);
+    return initialLength !== this.cameras.length;
   }
 
-  // Recording methods
-  async getRecordings(cameraId?: number): Promise<Recording[]> {
-    let recordings = Array.from(this.recordings.values());
-    if (cameraId) {
-      recordings = recordings.filter(recording => recording.cameraId === cameraId);
+  // Recording operations
+  async getRecordings(filters?: { cameraId?: string, startDate?: Date, endDate?: Date }): Promise<Recording[]> {
+    let filteredRecordings = [...this.recordings];
+
+    if (filters?.cameraId) {
+      filteredRecordings = filteredRecordings.filter(recording => recording.cameraId === filters.cameraId);
     }
-    return recordings;
-  }
 
-  async getRecording(id: number): Promise<Recording | undefined> {
-    return this.recordings.get(id);
-  }
-
-  async createRecording(insertRecording: InsertRecording): Promise<Recording> {
-    const id = this.recordingId++;
-    const now = new Date();
-    const recording: Recording = {
-      ...insertRecording,
-      id,
-      endTime: null,
-      fileUrl: null,
-      createdAt: now
-    };
-    this.recordings.set(id, recording);
-    return recording;
-  }
-
-  async updateRecording(id: number, data: Partial<Recording>): Promise<Recording | undefined> {
-    const recording = this.recordings.get(id);
-    if (!recording) return undefined;
-    
-    const updatedRecording = { ...recording, ...data };
-    this.recordings.set(id, updatedRecording);
-    return updatedRecording;
-  }
-
-  async deleteRecording(id: number): Promise<boolean> {
-    return this.recordings.delete(id);
-  }
-
-  // Alert methods
-  async getAlerts(cameraId?: number): Promise<Alert[]> {
-    let alerts = Array.from(this.alerts.values());
-    if (cameraId) {
-      alerts = alerts.filter(alert => alert.cameraId === cameraId);
+    if (filters?.startDate) {
+      filteredRecordings = filteredRecordings.filter(recording => recording.startTime >= filters.startDate!);
     }
-    // Sort by timestamp in descending order (newest first)
-    return alerts.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+    if (filters?.endDate) {
+      filteredRecordings = filteredRecordings.filter(recording => recording.startTime <= filters.endDate!);
+    }
+
+    return filteredRecordings;
   }
 
-  async getAlert(id: number): Promise<Alert | undefined> {
-    return this.alerts.get(id);
+  async getRecordingById(id: string): Promise<Recording | null> {
+    return this.recordings.find(recording => recording.id === id) || null;
   }
 
-  async createAlert(insertAlert: InsertAlert): Promise<Alert> {
-    const id = this.alertId++;
-    const now = new Date();
-    const alert: Alert = {
-      ...insertAlert,
-      id,
-      timestamp: now,
-      isRead: false
+  async createRecording(data: InsertRecording): Promise<Recording> {
+    const newRecording: Recording = {
+      id: uuidv4(),
+      ...data,
     };
-    this.alerts.set(id, alert);
-    return alert;
+    this.recordings.push(newRecording);
+    return newRecording;
   }
 
-  async updateAlert(id: number, data: Partial<Alert>): Promise<Alert | undefined> {
-    const alert = this.alerts.get(id);
-    if (!alert) return undefined;
-    
-    const updatedAlert = { ...alert, ...data };
-    this.alerts.set(id, updatedAlert);
-    return updatedAlert;
+  async updateRecording(id: string, data: Partial<Recording>): Promise<Recording | null> {
+    const index = this.recordings.findIndex(recording => recording.id === id);
+    if (index === -1) return null;
+
+    this.recordings[index] = { ...this.recordings[index], ...data };
+    return this.recordings[index];
   }
 
-  async deleteAlert(id: number): Promise<boolean> {
-    return this.alerts.delete(id);
+  async deleteRecording(id: string): Promise<boolean> {
+    const initialLength = this.recordings.length;
+    this.recordings = this.recordings.filter(recording => recording.id !== id);
+    return initialLength !== this.recordings.length;
   }
 
-  // Settings methods
+  // Alert operations
+  async getAlerts(filters?: { cameraId?: string, resolved?: boolean, startDate?: Date, endDate?: Date }): Promise<Alert[]> {
+    let filteredAlerts = [...this.alerts];
+
+    if (filters?.cameraId) {
+      filteredAlerts = filteredAlerts.filter(alert => alert.cameraId === filters.cameraId);
+    }
+
+    if (filters?.resolved !== undefined) {
+      filteredAlerts = filteredAlerts.filter(alert => alert.resolved === filters.resolved);
+    }
+
+    if (filters?.startDate) {
+      filteredAlerts = filteredAlerts.filter(alert => alert.timestamp >= filters.startDate!);
+    }
+
+    if (filters?.endDate) {
+      filteredAlerts = filteredAlerts.filter(alert => alert.timestamp <= filters.endDate!);
+    }
+
+    return filteredAlerts;
+  }
+
+  async getAlertById(id: string): Promise<Alert | null> {
+    return this.alerts.find(alert => alert.id === id) || null;
+  }
+
+  async createAlert(data: InsertAlert): Promise<Alert> {
+    const newAlert: Alert = {
+      id: uuidv4(),
+      ...data,
+    };
+    this.alerts.push(newAlert);
+    return newAlert;
+  }
+
+  async updateAlert(id: string, data: Partial<Alert>): Promise<Alert | null> {
+    const index = this.alerts.findIndex(alert => alert.id === id);
+    if (index === -1) return null;
+
+    this.alerts[index] = { ...this.alerts[index], ...data };
+    return this.alerts[index];
+  }
+
+  async deleteAlert(id: string): Promise<boolean> {
+    const initialLength = this.alerts.length;
+    this.alerts = this.alerts.filter(alert => alert.id !== id);
+    return initialLength !== this.alerts.length;
+  }
+
+  // Settings operations
   async getSettings(): Promise<Settings> {
     return this.settings;
   }
 
-  async updateSettings(data: Partial<Settings>): Promise<Settings> {
+  async updateSettings(data: InsertSettings): Promise<Settings> {
     this.settings = { ...this.settings, ...data };
     return this.settings;
   }
 }
 
+// Export a singleton instance
 export const storage = new MemStorage();

@@ -1,229 +1,230 @@
-import type { Express } from "express";
-import { createServer, type Server } from "http";
-import { storage } from "./storage";
-import { initCameraStreams } from "./camera-stream";
-import { startRecording, stopRecording, getCameraRecordings } from "./recording";
-import { resetMotionDetection } from "./motion-detection";
-import { z } from "zod";
-import { insertCameraSchema, insertSettingsSchema } from "@shared/schema";
+import { Router } from 'express';
+import { z } from 'zod';
+import { storage } from './storage';
+import { insertCameraSchema, insertRecordingSchema, insertAlertSchema, insertSettingsSchema } from '../shared/schema';
 
-export async function registerRoutes(app: Express): Promise<Server> {
-  const httpServer = createServer(app);
+const router = Router();
+
+// Helper to handle async routes
+const asyncHandler = (fn: Function) => (req: any, res: any, next: any) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
+
+// Cameras
+router.get('/cameras', asyncHandler(async (req, res) => {
+  const cameras = await storage.getCameras();
+  res.json(cameras);
+}));
+
+router.get('/cameras/:id', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const camera = await storage.getCameraById(id);
   
-  // Initialize camera streams WebSocket server
-  initCameraStreams(httpServer);
+  if (!camera) {
+    return res.status(404).json({ error: 'Camera not found' });
+  }
   
-  // Camera routes
-  app.get("/api/cameras", async (req, res) => {
-    const cameras = await storage.getCameras();
-    res.json(cameras);
-  });
-  
-  app.get("/api/cameras/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: "Invalid camera ID" });
+  res.json(camera);
+}));
+
+router.post('/cameras', asyncHandler(async (req, res) => {
+  try {
+    const validatedData = insertCameraSchema.parse(req.body);
+    const camera = await storage.createCamera(validatedData);
+    res.status(201).json(camera);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors });
     }
+    throw error;
+  }
+}));
+
+router.patch('/cameras/:id', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    const validatedData = insertCameraSchema.partial().parse(req.body);
+    const camera = await storage.updateCamera(id, validatedData);
     
-    const camera = await storage.getCamera(id);
     if (!camera) {
-      return res.status(404).json({ message: "Camera not found" });
+      return res.status(404).json({ error: 'Camera not found' });
     }
     
     res.json(camera);
-  });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors });
+    }
+    throw error;
+  }
+}));
+
+router.delete('/cameras/:id', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const success = await storage.deleteCamera(id);
   
-  app.post("/api/cameras", async (req, res) => {
-    try {
-      const validatedData = insertCameraSchema.parse(req.body);
-      const camera = await storage.createCamera(validatedData);
-      res.status(201).json(camera);
-    } catch (error) {
-      res.status(400).json({ message: "Invalid camera data", error });
-    }
-  });
+  if (!success) {
+    return res.status(404).json({ error: 'Camera not found' });
+  }
   
-  app.put("/api/cameras/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: "Invalid camera ID" });
-    }
-    
-    try {
-      const updateSchema = insertCameraSchema.partial();
-      const validatedData = updateSchema.parse(req.body);
-      
-      const camera = await storage.updateCamera(id, validatedData);
-      if (!camera) {
-        return res.status(404).json({ message: "Camera not found" });
-      }
-      
-      res.json(camera);
-    } catch (error) {
-      res.status(400).json({ message: "Invalid camera data", error });
-    }
-  });
+  res.status(204).end();
+}));
+
+// Recordings
+router.get('/recordings', asyncHandler(async (req, res) => {
+  const { cameraId, startDate, endDate } = req.query;
   
-  app.delete("/api/cameras/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: "Invalid camera ID" });
-    }
-    
-    const success = await storage.deleteCamera(id);
-    if (!success) {
-      return res.status(404).json({ message: "Camera not found" });
-    }
-    
-    res.status(204).end();
-  });
+  const filters: any = {};
+  if (cameraId) filters.cameraId = String(cameraId);
+  if (startDate) filters.startDate = new Date(String(startDate));
+  if (endDate) filters.endDate = new Date(String(endDate));
   
-  // Recording routes
-  app.get("/api/recordings", async (req, res) => {
-    const cameraId = req.query.cameraId ? parseInt(req.query.cameraId as string) : undefined;
-    
-    if (req.query.cameraId && isNaN(cameraId!)) {
-      return res.status(400).json({ message: "Invalid camera ID" });
-    }
-    
-    const recordings = await storage.getRecordings(cameraId);
-    res.json(recordings);
-  });
+  const recordings = await storage.getRecordings(filters);
+  res.json(recordings);
+}));
+
+router.get('/recordings/:id', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const recording = await storage.getRecordingById(id);
   
-  app.get("/api/recordings/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: "Invalid recording ID" });
+  if (!recording) {
+    return res.status(404).json({ error: 'Recording not found' });
+  }
+  
+  res.json(recording);
+}));
+
+router.post('/recordings', asyncHandler(async (req, res) => {
+  try {
+    const validatedData = insertRecordingSchema.parse(req.body);
+    const recording = await storage.createRecording(validatedData);
+    res.status(201).json(recording);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors });
     }
+    throw error;
+  }
+}));
+
+router.patch('/recordings/:id', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    const validatedData = insertRecordingSchema.partial().parse(req.body);
+    const recording = await storage.updateRecording(id, validatedData);
     
-    const recording = await storage.getRecording(id);
     if (!recording) {
-      return res.status(404).json({ message: "Recording not found" });
+      return res.status(404).json({ error: 'Recording not found' });
     }
     
     res.json(recording);
-  });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors });
+    }
+    throw error;
+  }
+}));
+
+router.delete('/recordings/:id', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const success = await storage.deleteRecording(id);
   
-  app.post("/api/cameras/:id/start-recording", async (req, res) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: "Invalid camera ID" });
-    }
-    
-    try {
-      const recordingId = await startRecording(id);
-      res.status(201).json({ recordingId });
-    } catch (error: any) {
-      res.status(400).json({ message: error.message });
-    }
-  });
+  if (!success) {
+    return res.status(404).json({ error: 'Recording not found' });
+  }
   
-  app.post("/api/cameras/:id/stop-recording", async (req, res) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: "Invalid camera ID" });
-    }
-    
-    try {
-      const recording = await stopRecording(id);
-      res.json(recording);
-    } catch (error: any) {
-      res.status(400).json({ message: error.message });
-    }
-  });
+  res.status(204).end();
+}));
+
+// Alerts
+router.get('/alerts', asyncHandler(async (req, res) => {
+  const { cameraId, resolved, startDate, endDate } = req.query;
   
-  // Alert routes
-  app.get("/api/alerts", async (req, res) => {
-    const cameraId = req.query.cameraId ? parseInt(req.query.cameraId as string) : undefined;
-    
-    if (req.query.cameraId && isNaN(cameraId!)) {
-      return res.status(400).json({ message: "Invalid camera ID" });
-    }
-    
-    const alerts = await storage.getAlerts(cameraId);
-    res.json(alerts);
-  });
+  const filters: any = {};
+  if (cameraId) filters.cameraId = String(cameraId);
+  if (resolved !== undefined) filters.resolved = resolved === 'true';
+  if (startDate) filters.startDate = new Date(String(startDate));
+  if (endDate) filters.endDate = new Date(String(endDate));
   
-  app.get("/api/alerts/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: "Invalid alert ID" });
+  const alerts = await storage.getAlerts(filters);
+  res.json(alerts);
+}));
+
+router.get('/alerts/:id', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const alert = await storage.getAlertById(id);
+  
+  if (!alert) {
+    return res.status(404).json({ error: 'Alert not found' });
+  }
+  
+  res.json(alert);
+}));
+
+router.post('/alerts', asyncHandler(async (req, res) => {
+  try {
+    const validatedData = insertAlertSchema.parse(req.body);
+    const alert = await storage.createAlert(validatedData);
+    res.status(201).json(alert);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors });
     }
+    throw error;
+  }
+}));
+
+router.patch('/alerts/:id', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    const validatedData = insertAlertSchema.partial().parse(req.body);
+    const alert = await storage.updateAlert(id, validatedData);
     
-    const alert = await storage.getAlert(id);
     if (!alert) {
-      return res.status(404).json({ message: "Alert not found" });
+      return res.status(404).json({ error: 'Alert not found' });
     }
     
     res.json(alert);
-  });
-  
-  app.put("/api/alerts/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: "Invalid alert ID" });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors });
     }
-    
-    try {
-      const updateSchema = z.object({
-        isRead: z.boolean().optional()
-      });
-      
-      const validatedData = updateSchema.parse(req.body);
-      const alert = await storage.updateAlert(id, validatedData);
-      
-      if (!alert) {
-        return res.status(404).json({ message: "Alert not found" });
-      }
-      
-      res.json(alert);
-    } catch (error) {
-      res.status(400).json({ message: "Invalid alert data", error });
-    }
-  });
-  
-  app.delete("/api/alerts/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: "Invalid alert ID" });
-    }
-    
-    const success = await storage.deleteAlert(id);
-    if (!success) {
-      return res.status(404).json({ message: "Alert not found" });
-    }
-    
-    res.status(204).end();
-  });
-  
-  // Settings routes
-  app.get("/api/settings", async (req, res) => {
-    const settings = await storage.getSettings();
-    res.json(settings);
-  });
-  
-  app.put("/api/settings", async (req, res) => {
-    try {
-      const updateSchema = insertSettingsSchema.partial();
-      const validatedData = updateSchema.parse(req.body);
-      
-      const settings = await storage.updateSettings(validatedData);
-      res.json(settings);
-    } catch (error) {
-      res.status(400).json({ message: "Invalid settings data", error });
-    }
-  });
-  
-  // Motion detection routes
-  app.post("/api/cameras/:id/reset-motion", async (req, res) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: "Invalid camera ID" });
-    }
-    
-    resetMotionDetection(id);
-    res.status(204).end();
-  });
+    throw error;
+  }
+}));
 
-  return httpServer;
-}
+router.delete('/alerts/:id', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const success = await storage.deleteAlert(id);
+  
+  if (!success) {
+    return res.status(404).json({ error: 'Alert not found' });
+  }
+  
+  res.status(204).end();
+}));
+
+// Settings
+router.get('/settings', asyncHandler(async (req, res) => {
+  const settings = await storage.getSettings();
+  res.json(settings);
+}));
+
+router.patch('/settings', asyncHandler(async (req, res) => {
+  try {
+    const validatedData = insertSettingsSchema.partial().parse(req.body);
+    const settings = await storage.updateSettings(validatedData);
+    res.json(settings);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors });
+    }
+    throw error;
+  }
+}));
+
+export default router;
