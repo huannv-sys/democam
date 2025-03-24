@@ -1,159 +1,365 @@
-import { useState } from "react"
-import { useQuery, useMutation } from "@tanstack/react-query"
-import { 
-  Card, 
-  CardHeader, 
-  CardTitle, 
-  CardContent,
-  CardFooter 
-} from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Camera as CameraIcon, Plus, Edit, Trash2, CheckCircle, XCircle } from "lucide-react"
-import { Link } from "wouter"
-import { apiRequest, queryClient } from "@/lib/queryClient"
-import { Camera } from "../../shared/schema"
+import * as React from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiRequest } from '../lib/queryClient';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '../components/ui/card';
+import { Button } from '../components/ui/button';
+import { toast } from '../hooks/use-toast';
+
+interface Camera {
+  id: string;
+  name: string;
+  ip: string;
+  port: number;
+  username: string;
+  password: string;
+  model?: string;
+  manufacturer?: string;
+  location?: string;
+  status?: 'online' | 'offline';
+  lastSeen?: string;
+  onvifPort?: number;
+  rtspUrl?: string;
+}
+
+interface AddCameraFormData {
+  name: string;
+  ip: string;
+  port: number;
+  username: string;
+  password: string;
+  location?: string;
+  onvifPort?: number;
+  rtspUrl?: string;
+}
 
 export default function Cameras() {
-  const { data: cameras = [], isLoading } = useQuery<Camera[]>({
-    queryKey: ["/api/cameras"],
-  })
+  const queryClient = useQueryClient();
+  const [isAddingCamera, setIsAddingCamera] = React.useState(false);
+  const [formData, setFormData] = React.useState<AddCameraFormData>({
+    name: '',
+    ip: '',
+    port: 80,
+    username: '',
+    password: '',
+    onvifPort: 2020,
+  });
 
-  const deleteCamera = useMutation({
-    mutationFn: (id: string) => 
-      apiRequest(`/api/cameras/${id}`, { method: "DELETE" }),
+  const { data: cameras, isLoading } = useQuery({
+    queryKey: ['cameras'],
+    queryFn: () => apiRequest('/api/cameras'),
+  });
+
+  const addCameraMutation = useMutation({
+    mutationFn: (newCamera: AddCameraFormData) => 
+      apiRequest('/api/cameras', { 
+        method: 'POST',
+        body: JSON.stringify(newCamera)
+      }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cameras"] })
+      queryClient.invalidateQueries({ queryKey: ['cameras'] });
+      setIsAddingCamera(false);
+      setFormData({
+        name: '',
+        ip: '',
+        port: 80,
+        username: '',
+        password: '',
+        onvifPort: 2020,
+      });
+      toast({
+        title: "Camera Added",
+        description: "The camera has been successfully added.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: `Failed to add camera: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
     }
-  })
+  });
 
-  const [filterStatus, setFilterStatus] = useState<"ALL" | "ONLINE" | "OFFLINE">("ALL")
-  
-  const filteredCameras = cameras.filter(camera => {
-    if (filterStatus === "ALL") return true
-    return camera.status === filterStatus
-  })
-
-  const handleDeleteCamera = (id: string) => {
-    if (confirm("Bạn có chắc chắn muốn xóa camera này?")) {
-      deleteCamera.mutate(id)
+  const deleteCameraMutation = useMutation({
+    mutationFn: (id: string) => 
+      apiRequest(`/api/cameras/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cameras'] });
+      toast({
+        title: "Camera Removed",
+        description: "The camera has been successfully removed.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: `Failed to remove camera: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
     }
-  }
+  });
+
+  const testCameraConnection = async (id: string) => {
+    try {
+      toast({
+        title: "Testing Connection",
+        description: "Checking camera connectivity...",
+      });
+
+      const result = await apiRequest(`/api/cameras/${id}/test`, { method: 'POST' });
+      
+      if (result.success) {
+        toast({
+          title: "Connection Successful",
+          description: "The camera is online and accessible.",
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Connection Failed",
+          description: result.message || "Could not connect to the camera. Please check the settings.",
+        });
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Test Failed",
+        description: `Could not perform connection test: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
+    }
+  };
+
+  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'number' ? parseInt(value, 10) : value
+    }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    addCameraMutation.mutate(formData);
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Quản lý Camera</h1>
-          <p className="text-muted-foreground">Quản lý và xem toàn bộ camera trong hệ thống</p>
-        </div>
-        <Link href="/cameras/new">
-          <Button className="flex items-center gap-1">
-            <Plus className="h-4 w-4" />
-            Thêm Camera
-          </Button>
-        </Link>
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold">Cameras</h1>
+        <Button onClick={() => setIsAddingCamera(!isAddingCamera)}>
+          {isAddingCamera ? 'Cancel' : 'Add Camera'}
+        </Button>
       </div>
 
-      <div className="flex gap-2">
-        <Button
-          variant={filterStatus === "ALL" ? "default" : "outline"}
-          onClick={() => setFilterStatus("ALL")}
-        >
-          Tất cả
-        </Button>
-        <Button
-          variant={filterStatus === "ONLINE" ? "default" : "outline"}
-          onClick={() => setFilterStatus("ONLINE")}
-        >
-          Online
-        </Button>
-        <Button
-          variant={filterStatus === "OFFLINE" ? "default" : "outline"}
-          onClick={() => setFilterStatus("OFFLINE")}
-        >
-          Offline
-        </Button>
-      </div>
+      {isAddingCamera && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Add New Camera</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label htmlFor="name" className="text-sm font-medium">
+                    Camera Name*
+                  </label>
+                  <input
+                    id="name"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleFormChange}
+                    required
+                    className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                    placeholder="Living Room Camera"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="location" className="text-sm font-medium">
+                    Location
+                  </label>
+                  <input
+                    id="location"
+                    name="location"
+                    value={formData.location || ''}
+                    onChange={handleFormChange}
+                    className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                    placeholder="Living Room"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="ip" className="text-sm font-medium">
+                    IP Address*
+                  </label>
+                  <input
+                    id="ip"
+                    name="ip"
+                    value={formData.ip}
+                    onChange={handleFormChange}
+                    required
+                    className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                    placeholder="192.168.1.100"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="port" className="text-sm font-medium">
+                    HTTP Port
+                  </label>
+                  <input
+                    id="port"
+                    name="port"
+                    type="number"
+                    value={formData.port}
+                    onChange={handleFormChange}
+                    className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                    placeholder="80"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="onvifPort" className="text-sm font-medium">
+                    ONVIF Port
+                  </label>
+                  <input
+                    id="onvifPort"
+                    name="onvifPort"
+                    type="number"
+                    value={formData.onvifPort || ''}
+                    onChange={handleFormChange}
+                    className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                    placeholder="2020"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="rtspUrl" className="text-sm font-medium">
+                    RTSP URL (optional)
+                  </label>
+                  <input
+                    id="rtspUrl"
+                    name="rtspUrl"
+                    value={formData.rtspUrl || ''}
+                    onChange={handleFormChange}
+                    className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                    placeholder="rtsp://192.168.1.100:554/stream1"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="username" className="text-sm font-medium">
+                    Username*
+                  </label>
+                  <input
+                    id="username"
+                    name="username"
+                    value={formData.username}
+                    onChange={handleFormChange}
+                    required
+                    className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                    placeholder="admin"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="password" className="text-sm font-medium">
+                    Password*
+                  </label>
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    value={formData.password}
+                    onChange={handleFormChange}
+                    required
+                    className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                    placeholder="••••••••"
+                  />
+                </div>
+              </div>
+              <div className="pt-4">
+                <Button type="submit" disabled={addCameraMutation.isPending}>
+                  {addCameraMutation.isPending ? 'Adding...' : 'Add Camera'}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       {isLoading ? (
-        <div className="text-center py-10">
-          <p>Đang tải dữ liệu camera...</p>
-        </div>
-      ) : filteredCameras.length === 0 ? (
-        <div className="text-center py-10 border rounded-lg bg-muted/20">
-          <CameraIcon className="h-12 w-12 mx-auto text-muted-foreground" />
-          <h3 className="mt-4 text-lg font-medium">Không tìm thấy camera</h3>
-          <p className="text-muted-foreground mt-2">
-            {filterStatus !== "ALL" 
-              ? `Không có camera nào có trạng thái ${filterStatus === "ONLINE" ? "Online" : "Offline"}.` 
-              : "Chưa có camera nào trong hệ thống."}
-          </p>
-          <Button className="mt-4" asChild>
-            <Link href="/cameras/new">
-              <Plus className="h-4 w-4 mr-2" />
-              Thêm Camera
-            </Link>
-          </Button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredCameras.map((camera) => (
-            <Card key={camera.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-0 relative">
-                <div className="aspect-video bg-muted flex items-center justify-center">
-                  {/* Camera thumbnail/preview */}
-                  <Link href={`/cameras/${camera.id}`}>
-                    <a className="absolute inset-0 flex items-center justify-center">
-                      <CameraIcon className="h-12 w-12 text-muted-foreground" />
-                    </a>
-                  </Link>
-                  <div className={`absolute top-2 right-2 text-xs px-2 py-1 rounded-full flex items-center ${
-                    camera.status === "ONLINE"
-                      ? "bg-green-100 text-green-800"
-                      : "bg-red-100 text-red-800"
-                  }`}>
-                    {camera.status === "ONLINE" ? (
-                      <>
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        Online
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="h-3 w-3 mr-1" />
-                        Offline
-                      </>
-                    )}
+        <div>Loading cameras...</div>
+      ) : cameras?.length ? (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {cameras.map((camera: Camera) => (
+            <Card key={camera.id} className="overflow-hidden">
+              <CardHeader className="pb-2">
+                <div className="flex justify-between">
+                  <CardTitle>{camera.name}</CardTitle>
+                  <div className="flex items-center">
+                    <span 
+                      className={`h-2 w-2 rounded-full mr-2 ${
+                        camera.status === 'online' ? 'bg-green-500' : 'bg-red-500'
+                      }`} 
+                    />
+                    <span className="text-xs capitalize">{camera.status || 'unknown'}</span>
                   </div>
                 </div>
-                <div className="p-4">
-                  <Link href={`/cameras/${camera.id}`}>
-                    <a>
-                      <h3 className="font-medium text-lg mb-1">{camera.name}</h3>
-                    </a>
-                  </Link>
-                  <p className="text-muted-foreground text-sm">{camera.location}</p>
-                  <p className="text-muted-foreground text-xs mt-1">IP: {camera.ipAddress}</p>
+              </CardHeader>
+              <CardContent>
+                <div className="aspect-video bg-gray-100 mb-4 flex items-center justify-center">
+                  <div className="text-gray-400">Camera Preview</div>
+                  {/* In a real app, this would be a actual camera stream */}
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Model:</span>
+                    <span>{camera.model || 'Unknown'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">IP Address:</span>
+                    <span>{camera.ip}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Location:</span>
+                    <span>{camera.location || 'Not specified'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Last Seen:</span>
+                    <span>{camera.lastSeen ? new Date(camera.lastSeen).toLocaleString() : 'Never'}</span>
+                  </div>
                 </div>
               </CardContent>
-              <CardFooter className="flex justify-between p-4 pt-0">
-                <Button variant="outline" size="sm" asChild>
-                  <Link href={`/cameras/${camera.id}/edit`}>
-                    <Edit className="h-4 w-4 mr-1" /> Sửa
-                  </Link>
+              <CardFooter className="flex justify-between">
+                <Button 
+                  variant="outline"
+                  onClick={() => testCameraConnection(camera.id)}
+                >
+                  Test Connection
                 </Button>
                 <Button 
-                  variant="destructive" 
-                  size="sm" 
-                  onClick={() => handleDeleteCamera(camera.id)}
-                  disabled={deleteCamera.isPending}
+                  variant="destructive"
+                  onClick={() => {
+                    if (confirm('Are you sure you want to remove this camera?')) {
+                      deleteCameraMutation.mutate(camera.id);
+                    }
+                  }}
                 >
-                  <Trash2 className="h-4 w-4 mr-1" /> Xóa
+                  Remove
                 </Button>
               </CardFooter>
             </Card>
           ))}
         </div>
+      ) : (
+        <Card>
+          <CardContent className="p-6 text-center">
+            <p className="mb-4">No cameras have been added yet.</p>
+            <p className="text-sm text-gray-500 mb-4">
+              Add your first camera to start monitoring.
+            </p>
+            {!isAddingCamera && (
+              <Button onClick={() => setIsAddingCamera(true)}>
+                Add Your First Camera
+              </Button>
+            )}
+          </CardContent>
+        </Card>
       )}
     </div>
-  )
+  );
 }

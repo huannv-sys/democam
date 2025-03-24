@@ -1,258 +1,370 @@
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useQuery, useMutation } from "@tanstack/react-query"
-import { z } from "zod"
-import { 
-  Card, 
-  CardHeader, 
-  CardTitle, 
-  CardContent,
-  CardDescription,
-  CardFooter
-} from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Save, Loader2 } from "lucide-react"
-import { apiRequest, queryClient } from "@/lib/queryClient"
-import { toast } from "@/hooks/use-toast"
-import { Settings } from "../../shared/schema"
+import * as React from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { apiRequest } from '../lib/queryClient';
+import { toast } from '../hooks/use-toast';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Button } from '../components/ui/button';
+import { z } from 'zod';
 
-// Extended form schema with validation
 const settingsFormSchema = z.object({
-  storageLocation: z.string().min(1, "Vui lòng nhập vị trí lưu trữ"),
-  maxStorageSize: z.coerce.number().min(1, "Kích thước tối thiểu là 1GB"),
-  retentionPeriod: z.coerce.number().min(1, "Thời gian tối thiểu là 1 ngày"),
-  defaultMotionSensitivity: z.coerce.number().min(1).max(10, "Chọn giá trị từ 1-10"),
-  recordingFormat: z.enum(["MP4", "WEBM"]),
-  maxConcurrentStreams: z.coerce.number().min(1, "Tối thiểu 1 luồng"),
-  notificationsEnabled: z.boolean()
-})
+  motionDetectionEnabled: z.boolean().default(true),
+  motionSensitivity: z.number().min(1).max(10).default(5),
+  recordOnMotion: z.boolean().default(true),
+  recordingDuration: z.number().min(5).max(300).default(30),
+  alertOnMotion: z.boolean().default(true),
+  saveSnapshots: z.boolean().default(true),
+  storageLimit: z.number().min(1).max(1000).default(100),
+  autoDeleteOldRecordings: z.boolean().default(true),
+  retentionDays: z.number().min(1).max(365).default(30),
+  emailNotifications: z.boolean().default(false),
+  emailAddress: z.string().email().optional(),
+});
 
 type SettingsFormValues = z.infer<typeof settingsFormSchema>
 
 export default function SettingsPage() {
-  const { data: settings, isLoading } = useQuery<Settings>({
-    queryKey: ["/api/settings"],
-  })
+  const { data: settings, isLoading } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => apiRequest('/api/settings'),
+  });
 
-  const updateSettings = useMutation({
+  const [formValues, setFormValues] = React.useState<SettingsFormValues>({
+    motionDetectionEnabled: true,
+    motionSensitivity: 5,
+    recordOnMotion: true,
+    recordingDuration: 30,
+    alertOnMotion: true,
+    saveSnapshots: true,
+    storageLimit: 100,
+    autoDeleteOldRecordings: true,
+    retentionDays: 30,
+    emailNotifications: false,
+    emailAddress: '',
+  });
+
+  React.useEffect(() => {
+    if (settings) {
+      setFormValues(settings);
+    }
+  }, [settings]);
+
+  const updateSettingsMutation = useMutation({
     mutationFn: (data: SettingsFormValues) => 
-      apiRequest("/api/settings", { 
-        method: "PUT", 
-        body: JSON.stringify(data) 
+      apiRequest('/api/settings', { 
+        method: 'PUT',
+        body: JSON.stringify(data)
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/settings"] })
       toast({
-        title: "Lưu thành công",
-        description: "Cài đặt đã được cập nhật",
-      })
+        title: "Settings Updated",
+        description: "Your settings have been successfully saved.",
+      });
     },
     onError: (error) => {
       toast({
-        title: "Lỗi",
-        description: `Không thể cập nhật cài đặt: ${error.message}`,
         variant: "destructive",
-      })
+        title: "Error",
+        description: `Failed to update settings: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
     }
-  })
-
-  const form = useForm<SettingsFormValues>({
-    resolver: zodResolver(settingsFormSchema),
-    defaultValues: {
-      storageLocation: "",
-      maxStorageSize: 10,
-      retentionPeriod: 30,
-      defaultMotionSensitivity: 5,
-      recordingFormat: "MP4",
-      maxConcurrentStreams: 5,
-      notificationsEnabled: true
-    }
-  })
-
-  // Update form values when settings are loaded
-  React.useEffect(() => {
-    if (settings) {
-      form.reset(settings)
-    }
-  }, [settings, form])
+  });
 
   const onSubmit = (data: SettingsFormValues) => {
-    updateSettings.mutate(data)
+    updateSettingsMutation.mutate(data);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type, checked } = e.target;
+    setFormValues((prev) => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : type === 'number' ? parseInt(value, 10) : value,
+    }));
+  };
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const validatedData = settingsFormSchema.parse(formValues);
+      onSubmit(validatedData);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const errorMessage = error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+        toast({
+          variant: "destructive",
+          title: "Validation Error",
+          description: errorMessage,
+        });
+      }
+    }
+  };
+
+  if (isLoading) {
+    return <div>Loading settings...</div>;
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Cài đặt hệ thống</h1>
-        <p className="text-muted-foreground">Tùy chỉnh cài đặt cho hệ thống giám sát camera</p>
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold">System Settings</h1>
       </div>
 
-      {isLoading ? (
-        <div className="text-center py-10">
-          <p>Đang tải dữ liệu cài đặt...</p>
-        </div>
-      ) : (
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={handleFormSubmit}>
+        <div className="space-y-6">
+          {/* Motion Detection Settings */}
           <Card>
             <CardHeader>
-              <CardTitle>Cài đặt lưu trữ</CardTitle>
-              <CardDescription>
-                Tùy chỉnh cách hệ thống lưu trữ bản ghi video
-              </CardDescription>
+              <CardTitle>Motion Detection</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label htmlFor="storageLocation" className="text-sm font-medium">
-                    Vị trí lưu trữ
+              <div className="flex items-center justify-between">
+                <div>
+                  <label htmlFor="motionDetectionEnabled" className="font-medium">
+                    Enable Motion Detection
                   </label>
-                  <input
-                    id="storageLocation"
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
-                    placeholder="/path/to/storage"
-                    {...form.register("storageLocation")}
-                  />
-                  {form.formState.errors.storageLocation && (
-                    <p className="text-sm text-red-500">{form.formState.errors.storageLocation.message}</p>
-                  )}
+                  <p className="text-sm text-gray-500">
+                    Detect movement in camera feeds and trigger actions
+                  </p>
                 </div>
-                
-                <div className="space-y-2">
-                  <label htmlFor="maxStorageSize" className="text-sm font-medium">
-                    Dung lượng tối đa (GB)
-                  </label>
-                  <input
-                    id="maxStorageSize"
-                    type="number"
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
-                    {...form.register("maxStorageSize")}
-                  />
-                  {form.formState.errors.maxStorageSize && (
-                    <p className="text-sm text-red-500">{form.formState.errors.maxStorageSize.message}</p>
-                  )}
-                </div>
-                
-                <div className="space-y-2">
-                  <label htmlFor="retentionPeriod" className="text-sm font-medium">
-                    Thời gian lưu trữ (ngày)
-                  </label>
-                  <input
-                    id="retentionPeriod"
-                    type="number"
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
-                    {...form.register("retentionPeriod")}
-                  />
-                  {form.formState.errors.retentionPeriod && (
-                    <p className="text-sm text-red-500">{form.formState.errors.retentionPeriod.message}</p>
-                  )}
-                </div>
-                
-                <div className="space-y-2">
-                  <label htmlFor="recordingFormat" className="text-sm font-medium">
-                    Định dạng ghi hình
-                  </label>
-                  <select
-                    id="recordingFormat"
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
-                    {...form.register("recordingFormat")}
-                  >
-                    <option value="MP4">MP4</option>
-                    <option value="WEBM">WEBM</option>
-                  </select>
-                  {form.formState.errors.recordingFormat && (
-                    <p className="text-sm text-red-500">{form.formState.errors.recordingFormat.message}</p>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader>
-              <CardTitle>Cài đặt camera</CardTitle>
-              <CardDescription>
-                Tùy chỉnh cài đặt mặc định cho tất cả camera
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label htmlFor="defaultMotionSensitivity" className="text-sm font-medium">
-                    Độ nhạy phát hiện chuyển động (1-10)
-                  </label>
-                  <input
-                    id="defaultMotionSensitivity"
-                    type="number"
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
-                    min="1"
-                    max="10"
-                    {...form.register("defaultMotionSensitivity")}
-                  />
-                  {form.formState.errors.defaultMotionSensitivity && (
-                    <p className="text-sm text-red-500">{form.formState.errors.defaultMotionSensitivity.message}</p>
-                  )}
-                </div>
-                
-                <div className="space-y-2">
-                  <label htmlFor="maxConcurrentStreams" className="text-sm font-medium">
-                    Số luồng xem song song tối đa
-                  </label>
-                  <input
-                    id="maxConcurrentStreams"
-                    type="number"
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
-                    {...form.register("maxConcurrentStreams")}
-                  />
-                  {form.formState.errors.maxConcurrentStreams && (
-                    <p className="text-sm text-red-500">{form.formState.errors.maxConcurrentStreams.message}</p>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader>
-              <CardTitle>Thông báo</CardTitle>
-              <CardDescription>
-                Cài đặt thông báo khi phát hiện sự kiện
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center space-x-2">
                 <input
-                  id="notificationsEnabled"
                   type="checkbox"
-                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                  {...form.register("notificationsEnabled")}
+                  id="motionDetectionEnabled"
+                  name="motionDetectionEnabled"
+                  checked={formValues.motionDetectionEnabled}
+                  onChange={handleInputChange}
+                  className="h-5 w-5 rounded border-gray-300"
                 />
-                <label htmlFor="notificationsEnabled" className="text-sm font-medium">
-                  Bật thông báo khi phát hiện sự cố
+              </div>
+
+              <div>
+                <label htmlFor="motionSensitivity" className="font-medium">
+                  Motion Sensitivity: {formValues.motionSensitivity}
                 </label>
+                <p className="text-sm text-gray-500 mb-2">
+                  How sensitive the motion detection should be (1-10)
+                </p>
+                <input
+                  type="range"
+                  id="motionSensitivity"
+                  name="motionSensitivity"
+                  min="1"
+                  max="10"
+                  step="1"
+                  value={formValues.motionSensitivity}
+                  onChange={handleInputChange}
+                  className="w-full"
+                  disabled={!formValues.motionDetectionEnabled}
+                />
+                <div className="flex justify-between text-xs">
+                  <span>Low</span>
+                  <span>High</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <label htmlFor="recordOnMotion" className="font-medium">
+                    Record on Motion
+                  </label>
+                  <p className="text-sm text-gray-500">
+                    Automatically start recording when motion is detected
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  id="recordOnMotion"
+                  name="recordOnMotion"
+                  checked={formValues.recordOnMotion}
+                  onChange={handleInputChange}
+                  className="h-5 w-5 rounded border-gray-300"
+                  disabled={!formValues.motionDetectionEnabled}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="recordingDuration" className="font-medium">
+                  Recording Duration (seconds)
+                </label>
+                <p className="text-sm text-gray-500 mb-2">
+                  How long to record after motion is detected
+                </p>
+                <input
+                  type="number"
+                  id="recordingDuration"
+                  name="recordingDuration"
+                  min="5"
+                  max="300"
+                  value={formValues.recordingDuration}
+                  onChange={handleInputChange}
+                  className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                  disabled={!formValues.motionDetectionEnabled || !formValues.recordOnMotion}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <label htmlFor="alertOnMotion" className="font-medium">
+                    Create Alert on Motion
+                  </label>
+                  <p className="text-sm text-gray-500">
+                    Generate an alert entry when motion is detected
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  id="alertOnMotion"
+                  name="alertOnMotion"
+                  checked={formValues.alertOnMotion}
+                  onChange={handleInputChange}
+                  className="h-5 w-5 rounded border-gray-300"
+                  disabled={!formValues.motionDetectionEnabled}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <label htmlFor="saveSnapshots" className="font-medium">
+                    Save Snapshots
+                  </label>
+                  <p className="text-sm text-gray-500">
+                    Save still images when motion is detected
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  id="saveSnapshots"
+                  name="saveSnapshots"
+                  checked={formValues.saveSnapshots}
+                  onChange={handleInputChange}
+                  className="h-5 w-5 rounded border-gray-300"
+                  disabled={!formValues.motionDetectionEnabled}
+                />
               </div>
             </CardContent>
-            <CardFooter>
-              <Button 
-                type="submit" 
-                className="ml-auto"
-                disabled={updateSettings.isPending}
-              >
-                {updateSettings.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Đang lưu...
-                  </>
-                ) : (
-                  <>
-                    <Save className="mr-2 h-4 w-4" />
-                    Lưu thay đổi
-                  </>
-                )}
-              </Button>
-            </CardFooter>
           </Card>
-        </form>
-      )}
+
+          {/* Storage Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Storage Settings</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label htmlFor="storageLimit" className="font-medium">
+                  Storage Limit (GB)
+                </label>
+                <p className="text-sm text-gray-500 mb-2">
+                  Maximum storage space for recordings and snapshots
+                </p>
+                <input
+                  type="number"
+                  id="storageLimit"
+                  name="storageLimit"
+                  min="1"
+                  max="1000"
+                  value={formValues.storageLimit}
+                  onChange={handleInputChange}
+                  className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <label htmlFor="autoDeleteOldRecordings" className="font-medium">
+                    Auto-Delete Old Recordings
+                  </label>
+                  <p className="text-sm text-gray-500">
+                    Automatically delete old recordings when storage limit is reached
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  id="autoDeleteOldRecordings"
+                  name="autoDeleteOldRecordings"
+                  checked={formValues.autoDeleteOldRecordings}
+                  onChange={handleInputChange}
+                  className="h-5 w-5 rounded border-gray-300"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="retentionDays" className="font-medium">
+                  Retention Period (days)
+                </label>
+                <p className="text-sm text-gray-500 mb-2">
+                  How long to keep recordings before auto-deletion
+                </p>
+                <input
+                  type="number"
+                  id="retentionDays"
+                  name="retentionDays"
+                  min="1"
+                  max="365"
+                  value={formValues.retentionDays}
+                  onChange={handleInputChange}
+                  className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                  disabled={!formValues.autoDeleteOldRecordings}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Notification Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Notifications</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label htmlFor="emailNotifications" className="font-medium">
+                    Email Notifications
+                  </label>
+                  <p className="text-sm text-gray-500">
+                    Send email notifications when alerts are triggered
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  id="emailNotifications"
+                  name="emailNotifications"
+                  checked={formValues.emailNotifications}
+                  onChange={handleInputChange}
+                  className="h-5 w-5 rounded border-gray-300"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="emailAddress" className="font-medium">
+                  Email Address
+                </label>
+                <p className="text-sm text-gray-500 mb-2">
+                  Where to send email notifications
+                </p>
+                <input
+                  type="email"
+                  id="emailAddress"
+                  name="emailAddress"
+                  value={formValues.emailAddress || ''}
+                  onChange={handleInputChange}
+                  className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                  disabled={!formValues.emailNotifications}
+                  placeholder="your@email.com"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-end">
+            <Button 
+              type="submit" 
+              disabled={updateSettingsMutation.isPending}
+              className="px-6"
+            >
+              {updateSettingsMutation.isPending ? 'Saving...' : 'Save Settings'}
+            </Button>
+          </div>
+        </div>
+      </form>
     </div>
-  )
+  );
 }

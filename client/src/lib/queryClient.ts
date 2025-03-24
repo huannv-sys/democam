@@ -1,28 +1,32 @@
-import { QueryClient } from "@tanstack/react-query"
+import { QueryClient } from '@tanstack/react-query';
 
 export const apiRequest = async (url: string, options: RequestInit = {}) => {
-  const response = await fetch(url, {
+  const baseUrl = '';  // Uses the proxy configured in vite.config.js
+  const response = await fetch(`${baseUrl}${url}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
       ...options.headers,
     },
-  })
+  });
 
   if (!response.ok) {
-    throw new Error(`API request failed: ${response.statusText}`)
+    throw new Error(`API request failed: ${response.statusText}`);
   }
 
-  const data = await response.json()
-  return data
-}
+  // Some endpoints may return no content
+  if (response.status === 204) {
+    return null;
+  }
+
+  return response.json();
+};
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
       retry: 1,
-      staleTime: 5 * 60 * 1000, // 5 minutes
     },
   },
-})
+});

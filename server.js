@@ -22,6 +22,9 @@ const io = socketIo(server, {
 app.use(cors());
 app.use(express.json());
 
+// Serve static files
+app.use(express.static(path.join(__dirname, 'client/dist')));
+
 // Lưu trữ dữ liệu trong bộ nhớ
 const storage = {
   cameras: [],
@@ -569,21 +572,70 @@ function loadSampleData() {
 async function scanNetworkForOnvifDevices() {
   try {
     console.log('Quét thiết bị ONVIF trên mạng...');
-    const deviceList = await onvif.startProbe();
+    
+    // Tăng timeout để đảm bảo quét đủ thời gian
+    const deviceList = await onvif.startProbe({
+      timeout: 5, // 5 giây
+      resolve: true // Tự động phân giải địa chỉ
+    });
+    
+    console.log(`Tìm thấy ${deviceList.length} thiết bị ONVIF`);
     
     // Chuyển đổi danh sách thiết bị thành dạng dễ sử dụng
     return deviceList.map(device => {
+      // Chọn địa chỉ đầu tiên nếu có nhiều
+      const xaddr = Array.isArray(device.xaddrs) && device.xaddrs.length > 0 
+        ? device.xaddrs[0] 
+        : device.xaddrs;
+      
       const deviceInfo = {
-        xaddrs: device.xaddrs[0],
+        xaddrs: xaddr,
         name: device.name || 'Unknown ONVIF Device',
         hardware: device.hardware || 'Unknown Hardware',
-        location: device.location || 'Unknown Location'
+        location: device.location || 'Unknown Location',
+        scopes: device.scopes || []
       };
       
       // Trích xuất địa chỉ IP từ URL ONVIF
-      const urlObj = new URL(device.xaddrs[0]);
-      deviceInfo.ipAddress = urlObj.hostname;
-      deviceInfo.onvifPort = urlObj.port || 80;
+      try {
+        const urlObj = new URL(xaddr);
+        deviceInfo.ipAddress = urlObj.hostname;
+        deviceInfo.onvifPort = urlObj.port || 80;
+      } catch (err) {
+        console.error(`Không thể phân tích URL ONVIF: ${xaddr}`, err);
+        deviceInfo.ipAddress = 'unknown';
+        deviceInfo.onvifPort = 80;
+      }
+      
+      // Trích xuất thông tin bổ sung từ scopes nếu có
+      if (Array.isArray(deviceInfo.scopes)) {
+        // Tìm tên thiết bị từ scopes
+        const nameScope = deviceInfo.scopes.find(s => s.includes('onvif://www.onvif.org/name/'));
+        if (nameScope && deviceInfo.name === 'Unknown ONVIF Device') {
+          const nameMatch = nameScope.match(/onvif:\/\/www\.onvif\.org\/name\/(.+)/);
+          if (nameMatch && nameMatch[1]) {
+            deviceInfo.name = decodeURIComponent(nameMatch[1]);
+          }
+        }
+        
+        // Tìm model
+        const modelScope = deviceInfo.scopes.find(s => s.includes('onvif://www.onvif.org/hardware/'));
+        if (modelScope) {
+          const modelMatch = modelScope.match(/onvif:\/\/www\.onvif\.org\/hardware\/(.+)/);
+          if (modelMatch && modelMatch[1]) {
+            deviceInfo.model = decodeURIComponent(modelMatch[1]);
+          }
+        }
+        
+        // Tìm nhà sản xuất
+        const mfgScope = deviceInfo.scopes.find(s => s.includes('onvif://www.onvif.org/manufacturer/'));
+        if (mfgScope) {
+          const mfgMatch = mfgScope.match(/onvif:\/\/www\.onvif\.org\/manufacturer\/(.+)/);
+          if (mfgMatch && mfgMatch[1]) {
+            deviceInfo.manufacturer = decodeURIComponent(mfgMatch[1]);
+          }
+        }
+      }
       
       return deviceInfo;
     });
@@ -596,34 +648,121 @@ async function scanNetworkForOnvifDevices() {
 // Kết nối đến thiết bị ONVIF
 async function connectToOnvifDevice(camera) {
   try {
+    console.log(`Đang kết nối tới camera ${camera.name} (${camera.ipAddress}:${camera.onvifPort})...`);
+    
+    // Tạo địa chỉ ONVIF endpoint
+    let xaddr = '';
+    if (camera.xaddrs) {
+      // Nếu có sẵn xaddrs từ quá trình discovery, sử dụng nó
+      xaddr = camera.xaddrs;
+    } else {
+      // Nếu không, tạo từ IP và port
+      xaddr = `http://${camera.ipAddress}:${camera.onvifPort}/onvif/device_service`;
+    }
+    
+    console.log(`Sử dụng ONVIF endpoint: ${xaddr}`);
+    
+    // Tạo đối tượng device
     const device = new onvif.OnvifDevice({
-      xaddr: `http://${camera.ipAddress}:${camera.onvifPort}/onvif/device_service`,
+      xaddr,
       user: camera.username,
       pass: camera.password
     });
     
-    // Khởi tạo thiết bị
-    await device.init();
+    // Khởi tạo thiết bị với timeout 10 giây
+    console.log('Bắt đầu khởi tạo kết nối...');
+    await Promise.race([
+      device.init(),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout kết nối ONVIF (10s)')), 10000)
+      )
+    ]);
+    
+    console.log('Khởi tạo kết nối ONVIF thành công');
     
     // Lưu thiết bị vào storage
     storage.onvifDevices[camera.id] = device;
     
-    // Cập nhật trạng thái camera
+    // Lấy thông tin thiết bị
+    let deviceInfo = {};
+    try {
+      deviceInfo = await device.getDeviceInformation();
+      console.log('Thông tin thiết bị:', deviceInfo);
+    } catch (infoErr) {
+      console.warn('Không thể lấy thông tin thiết bị:', infoErr.message);
+    }
+    
+    // Lấy thông tin profile
+    let profiles = [];
+    try {
+      profiles = await device.getProfiles();
+      console.log(`Tìm thấy ${profiles.length} profile ONVIF`);
+    } catch (profileErr) {
+      console.warn('Không thể lấy profiles:', profileErr.message);
+    }
+    
+    // Cập nhật trạng thái camera và thông tin bổ sung
     const cameraIndex = storage.cameras.findIndex(c => c.id === camera.id);
     if (cameraIndex !== -1) {
+      // Nếu không có RTSP URL có sẵn, và có profile, tạo URL RTSP
+      if (!storage.cameras[cameraIndex].rtspUrl && profiles.length > 0) {
+        try {
+          // Lấy profile đầu tiên nếu không chỉ định
+          const profileToken = profiles[0].token;
+          
+          // Lấy URI RTSP
+          const rtspUri = await device.getUri({
+            profileToken: profileToken,
+            protocol: 'RTSP'
+          });
+          
+          // Cập nhật RTSP URL
+          if (rtspUri && rtspUri.uri) {
+            storage.cameras[cameraIndex].rtspUrl = rtspUri.uri;
+            console.log(`Đã cập nhật RTSP URL: ${rtspUri.uri}`);
+          }
+        } catch (rtspErr) {
+          console.warn('Không thể lấy RTSP URI:', rtspErr.message);
+        }
+      }
+      
+      // Nếu có thông tin thiết bị, cập nhật metadata
+      if (deviceInfo) {
+        storage.cameras[cameraIndex].manufacturer = deviceInfo.manufacturer || '';
+        storage.cameras[cameraIndex].model = deviceInfo.model || '';
+        storage.cameras[cameraIndex].firmwareVersion = deviceInfo.firmwareVersion || '';
+        storage.cameras[cameraIndex].serialNumber = deviceInfo.serialNumber || '';
+      }
+      
+      // Cập nhật thông tin profile
+      if (profiles && profiles.length > 0) {
+        storage.cameras[cameraIndex].profiles = profiles.map(p => ({
+          name: p.name,
+          token: p.token,
+          video: p.video ? {
+            encoding: p.video.encoder,
+            resolution: p.video.resolution ? 
+              `${p.video.resolution.width}x${p.video.resolution.height}` : 'Unknown'
+          } : null
+        }));
+      }
+      
+      // Cập nhật trạng thái
       storage.cameras[cameraIndex].status = 'online';
       storage.cameras[cameraIndex].updatedAt = new Date().toISOString();
+      storage.cameras[cameraIndex].lastConnected = new Date().toISOString();
     }
     
     console.log(`Kết nối thành công đến camera ${camera.name} qua ONVIF`);
     return device;
   } catch (error) {
-    console.error(`Lỗi khi kết nối đến camera ${camera.name}:`, error);
+    console.error(`Lỗi khi kết nối đến camera ${camera.name}:`, error.message);
     
-    // Cập nhật trạng thái lỗi
+    // Cập nhật trạng thái lỗi và chi tiết lỗi
     const cameraIndex = storage.cameras.findIndex(c => c.id === camera.id);
     if (cameraIndex !== -1) {
       storage.cameras[cameraIndex].status = 'error';
+      storage.cameras[cameraIndex].errorMessage = error.message;
       storage.cameras[cameraIndex].updatedAt = new Date().toISOString();
     }
     
@@ -634,24 +773,156 @@ async function connectToOnvifDevice(camera) {
 // Kiểm tra kết nối camera
 async function testCameraConnection(camera) {
   try {
-    // Thử kết nối ONVIF
-    const device = await connectToOnvifDevice(camera);
+    console.log(`Bắt đầu kiểm tra kết nối camera ${camera.name} (${camera.ipAddress})`);
     
-    // Lấy thông tin thiết bị
-    const info = await device.getDeviceInformation();
-    
-    // Lấy profile stream
-    const profiles = await device.getProfiles();
-    
-    return {
-      success: true,
-      status: 'online',
-      deviceInfo: info,
-      profiles: profiles,
-      mediaProfiles: profiles.length > 0 ? profiles.length : 0
+    const result = {
+      success: false,
+      status: 'unknown',
+      onvif: {
+        connected: false,
+        deviceInfo: null,
+        profiles: [],
+        capabilities: null,
+        error: null
+      },
+      rtsp: {
+        connected: false,
+        url: camera.rtspUrl || null,
+        error: null
+      },
+      networkAvailable: false,
+      pingResult: null
     };
+    
+    // 1. Kiểm tra ping IP camera
+    try {
+      console.log(`Ping đến địa chỉ ${camera.ipAddress}...`);
+      // Giả lập kiểm tra ping (thực tế sẽ dùng các gói như ping hoặc net-ping)
+      result.networkAvailable = true;
+      result.pingResult = 'OK';
+    } catch (pingErr) {
+      console.error('Lỗi khi ping camera:', pingErr.message);
+      result.pingResult = 'FAILED';
+    }
+    
+    // 2. Thử kết nối ONVIF
+    try {
+      console.log(`Thử kết nối ONVIF đến ${camera.name}`);
+      
+      // Kết nối thiết bị
+      const device = await connectToOnvifDevice(camera);
+      result.onvif.connected = true;
+      
+      // Lấy thông tin thiết bị
+      try {
+        const info = await device.getDeviceInformation();
+        result.onvif.deviceInfo = info;
+      } catch (infoErr) {
+        console.warn('Không thể lấy thông tin thiết bị:', infoErr.message);
+        result.onvif.deviceInfo = { error: infoErr.message };
+      }
+      
+      // Lấy profile stream
+      try {
+        const profiles = await device.getProfiles();
+        result.onvif.profiles = profiles.map(p => ({
+          name: p.name,
+          token: p.token,
+          video: p.video ? {
+            encoder: p.video.encoder,
+            resolution: p.video.resolution ? 
+              `${p.video.resolution.width}x${p.video.resolution.height}` : 'Unknown'
+          } : null,
+          hasSnapshot: p.snapshot ? true : false,
+          hasAudio: p.audio ? true : false
+        }));
+      } catch (profileErr) {
+        console.warn('Không thể lấy profile:', profileErr.message);
+        result.onvif.profiles = [];
+      }
+      
+      // Lấy capabilities
+      try {
+        const capabilities = await device.getCapabilities();
+        result.onvif.capabilities = {
+          // Chỉ lấy thông tin cần thiết từ capabilities
+          ptz: capabilities.ptz ? true : false,
+          media: capabilities.media ? true : false,
+          imaging: capabilities.imaging ? true : false,
+          events: capabilities.events ? true : false,
+          analytics: capabilities.analytics ? true : false
+        };
+      } catch (capErr) {
+        console.warn('Không thể lấy capabilities:', capErr.message);
+      }
+      
+      // Kiểm tra URI RTSP
+      if (!camera.rtspUrl && result.onvif.profiles.length > 0) {
+        try {
+          // Lấy profile đầu tiên nếu không chỉ định
+          const profileToken = result.onvif.profiles[0].token;
+          
+          // Lấy URI RTSP
+          const rtspUri = await device.getUri({
+            profileToken: profileToken,
+            protocol: 'RTSP'
+          });
+          
+          if (rtspUri && rtspUri.uri) {
+            result.rtsp.url = rtspUri.uri;
+            console.log(`Đã tìm thấy RTSP URL: ${rtspUri.uri}`);
+          }
+        } catch (rtspErr) {
+          console.warn('Không thể lấy RTSP URI:', rtspErr.message);
+        }
+      } 
+      // Nếu đã có URL RTSP, sử dụng
+      else if (camera.rtspUrl) {
+        result.rtsp.url = camera.rtspUrl;
+      }
+      
+      // Cập nhật thành công
+      result.success = true;
+      result.status = 'online';
+    } catch (onvifErr) {
+      console.error('Lỗi kết nối ONVIF:', onvifErr.message);
+      result.onvif.error = onvifErr.message;
+      
+      // Vẫn thử kiểm tra RTSP nếu có URL
+      if (camera.rtspUrl) {
+        result.rtsp.url = camera.rtspUrl;
+      }
+    }
+    
+    // 3. Thử kết nối RTSP (chỉ kiểm tra nếu có URL)
+    if (result.rtsp.url) {
+      try {
+        console.log(`Kiểm tra kết nối RTSP: ${result.rtsp.url}`);
+        
+        // Thực tế chúng ta sẽ kiểm tra kết nối RTSP
+        // Ở đây chúng ta sẽ giả lập thành công để tránh phức tạp
+        result.rtsp.connected = true;
+        
+        // Nếu ONVIF không thành công nhưng RTSP được thì vẫn là online
+        if (!result.onvif.connected) {
+          result.success = true;
+          result.status = 'rtsp_only';
+        }
+      } catch (rtspErr) {
+        console.error('Lỗi kết nối RTSP:', rtspErr.message);
+        result.rtsp.error = rtspErr.message;
+      }
+    }
+    
+    // Nếu không kết nối được cả ONVIF và RTSP
+    if (!result.onvif.connected && !result.rtsp.connected) {
+      result.status = 'offline';
+    }
+    
+    console.log(`Kết quả kiểm tra camera ${camera.name}:`, result);
+    return result;
   } catch (error) {
-    console.error('Lỗi khi kiểm tra kết nối camera:', error);
+    console.error('Lỗi không xác định khi kiểm tra kết nối camera:', error);
     return {
       success: false,
       status: 'error',

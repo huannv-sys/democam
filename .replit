@@ -23,6 +23,10 @@ args = "Analyzer Test"
 task = "workflow.run"
 args = "ServerBackend"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "ClientFrontend"
+
 [[workflows.workflow]]
 name = "RepositoryAnalyzer"
 author = "agent"
@@ -66,8 +70,27 @@ task = "shell.exec"
 args = "node server.js"
 waitForPort = 5000
 
+[[workflows.workflow]]
+name = "ClientFrontend"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd client && npm run dev"
+waitForPort = 3000
+
 [deployment]
 run = ["sh", "-c", "python analyzer.py"]
+
+[[ports]]
+localPort = 3000
+externalPort = 3000
 
 [[ports]]
 localPort = 5000

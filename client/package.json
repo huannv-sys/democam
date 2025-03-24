@@ -1,7 +1,7 @@
 {
   "name": "camera-monitoring-client",
-  "private": true,
   "version": "1.0.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,16 +9,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.8.4",
+    "@tanstack/react-query": "^5.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-webcam": "^7.1.1",
-    "wouter": "^2.11.0"
+    "react-webcam": "^7.2.0",
+    "wouter": "^2.12.1"
   },
   "devDependencies": {
     "@types/react": "^18.2.15",
     "@types/react-dom": "^18.2.7",
     "@vitejs/plugin-react": "^4.0.3",
-    "vite": "^4.4.5"
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.31",
+    "tailwindcss": "^3.3.5",
+    "vite": "^5.0.0"
   }
 }
