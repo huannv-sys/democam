@@ -282,6 +282,14 @@ app.get('/api/settings', (req, res) => {
   res.json(storage.settings);
 });
 
+// SPA fallback route - must come after API routes
+app.get('*', (req, res) => {
+  // All non-API routes should serve the React app
+  if (!req.path.startsWith('/api/')) {
+    res.sendFile(path.join(__dirname, 'client/dist/index.html'));
+  }
+});
+
 // Cập nhật cài đặt hệ thống
 app.put('/api/settings', (req, res) => {
   const { retentionDays, storagePath, notificationEmail, motionDetection, faceDetection, objectDetection } = req.body;

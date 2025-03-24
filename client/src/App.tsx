@@ -28,7 +28,7 @@ export default function App() {
               <div className="flex h-[calc(100vh-64px)] items-center justify-center">
                 <div className="text-center">
                   <h1 className="text-4xl font-bold">404</h1>
-                  <p className="mb-4">Page not found: {params.rest}</p>
+                  <p className="mb-4">Page not found</p>
                   <a href="/" className="text-blue-600 hover:underline">
                     Return to Dashboard
                   </a>
