@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+html {
+    padding: 0;
+    margin: 0;
+    overflow: hidden !important;
+}
+
+/* Estilos para motores Webkit y blink (Chrome, Safari, Opera... )*/
+
+.container_scroll::-webkit-scrollbar {
+    -webkit-appearance: none;
+}
+
+.container_scroll::-webkit-scrollbar:vertical {
+    width: 10px;
+}
+
+.container_scroll::-webkit-scrollbar-button:increment,
+.container_scroll::-webkit-scrollbar-button {
+    display: none;
+}
+
+.container_scroll::-webkit-scrollbar:horizontal {
+    height: 10px;
+}
+
+.container_scroll::-webkit-scrollbar-thumb {
+    background-color: #b6b6b6;
+    border-radius: 20px;
+    border: 2px solid #f1f2f3;
+}
+
+.container_scroll::-webkit-scrollbar-track {
+    border-radius: 10px;
+}
+
+/* Barra de scroll del sidebar de navegación lateral */
+
+.v-navigation-drawer__content::-webkit-scrollbar {
+    -webkit-appearance: none;
+}
+
+.v-navigation-drawer__content::-webkit-scrollbar:vertical {
+    width: 7px;
+}
+
+.v-navigation-drawer__content::-webkit-scrollbar-button:increment,
+.v-navigation-drawer__content::-webkit-scrollbar-button {
+    display: none;
+}
+
+.v-navigation-drawer__content::-webkit-scrollbar:horizontal {
+    height: 10px;
+}
+
+.v-navigation-drawer__content::-webkit-scrollbar-thumb {
+    background-color: #aaaaaab0;
+    border-radius: 10px;
+}
+
+.v-navigation-drawer__content::-webkit-scrollbar-track {
+    border-radius: 10px;
+}
+
+.code-json {
+    background-color: #3d3d3d;
+    border-radius: 3px;
+    color: white;
+    padding: 10px;
+}
+
+.language-json {
+    text-align: left;
+    font-size: 14px;
+}
+
+code {
+    display: block;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
