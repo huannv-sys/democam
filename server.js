@@ -14,6 +14,7 @@ const ffmpegStatic = require('ffmpeg-static');
 // Thêm utils mới cho Dahua camera 
 const { DahuaApi } = require('./utils/DahuaApi.js');
 const vlcIntegration = require('./vlc_integration.js');
+const aiManager = require('./ai_analytics/ai_manager.js');
 
 const app = express();
 const server = http.createServer(app);
@@ -570,6 +571,11 @@ app.get('/vlc', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'vlc_viewer.html'));
 });
 
+// Serve Analytics page
+app.get('/analytics', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'analytics.html'));
+});
+
 // Socket.IO events
 io.on('connection', (socket) => {
   console.log('Client kết nối: ' + socket.id);
@@ -825,6 +831,205 @@ app.post('/api/direct-connect', async (req, res) => {
       success: false,
       message: "Lỗi khi kết nối trực tiếp",
       error: error.message
+    });
+  }
+});
+
+// API route cho phân tích AI
+app.post('/api/analyze-snapshot', async (req, res) => {
+  try {
+    const { cameraId, type, host, port, user, pass, channel, options } = req.body;
+    
+    if (!host || !user || !pass) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu thông tin kết nối camera"
+      });
+    }
+    
+    // Lấy snapshot từ camera
+    let snapshot;
+    if (type === "hikvision") {
+      const camera = new hikvision({
+        host,
+        port: parseInt(port) || 80,
+        user,
+        pass,
+        timeout: 15000
+      });
+      
+      const channelId = channel || "101";
+      snapshot = await camera.picture(channelId);
+    } else if (type === "dahua") {
+      const dahuaApi = new DahuaApi({
+        host,
+        port: parseInt(port) || 80,
+        username: user,
+        password: pass,
+        timeout: 15000
+      });
+      
+      const channelNum = parseInt(channel) || 1;
+      snapshot = await dahuaApi.getSnapshot(channelNum);
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Loại camera không được hỗ trợ"
+      });
+    }
+    
+    if (!snapshot || snapshot.length < 100) {
+      return res.status(500).json({
+        success: false,
+        message: "Không thể lấy hình ảnh từ camera"
+      });
+    }
+    
+    // Phân tích hình ảnh với AI
+    const analysisOptions = {
+      detectPersons: options.detectPersons !== false,
+      detectFaces: options.detectFaces === true,
+      detectLicensePlates: options.detectLicensePlates === true,
+      detectObjects: options.detectObjects === true
+    };
+    
+    const results = await aiManager.analyzeForDisplay(cameraId, snapshot, analysisOptions);
+    
+    return res.json({
+      success: true,
+      message: "Đã phân tích hình ảnh thành công",
+      results
+    });
+  } catch (error) {
+    console.error("Lỗi khi phân tích hình ảnh:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi khi phân tích hình ảnh: " + error.message
+    });
+  }
+});
+
+app.post('/api/start-analysis-schedule', async (req, res) => {
+  try {
+    const { cameraId, type, host, port, user, pass, channel, interval, options } = req.body;
+    
+    if (!host || !user || !pass || !interval) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu thông tin cần thiết"
+      });
+    }
+    
+    // Tạo một hàm lấy snapshot
+    const snapshotFunction = async () => {
+      try {
+        if (type === "hikvision") {
+          const camera = new hikvision({
+            host,
+            port: parseInt(port) || 80,
+            user,
+            pass,
+            timeout: 15000
+          });
+          
+          const channelId = channel || "101";
+          return await camera.picture(channelId);
+        } else if (type === "dahua") {
+          const dahuaApi = new DahuaApi({
+            host,
+            port: parseInt(port) || 80,
+            username: user,
+            password: pass,
+            timeout: 15000
+          });
+          
+          const channelNum = parseInt(channel) || 1;
+          return await dahuaApi.getSnapshot(channelNum);
+        }
+        
+        throw new Error("Loại camera không được hỗ trợ");
+      } catch (error) {
+        console.error("Lỗi khi lấy snapshot cho phân tích tự động:", error);
+        throw error;
+      }
+    };
+    
+    // Chuyển đổi interval (giây) sang biểu thức cron
+    // 30 giây = "*/30 * * * * *"
+    // 60 giây = "* * * * *"
+    // > 60 giây = "*/n * * * *" (với n là số phút)
+    let cronExpression;
+    if (interval < 60) {
+      cronExpression = `*/${interval} * * * * *`; // mỗi n giây
+    } else if (interval === 60) {
+      cronExpression = "* * * * *"; // mỗi phút
+    } else {
+      const minutes = Math.floor(interval / 60);
+      cronExpression = `*/${minutes} * * * *`; // mỗi n phút
+    }
+    
+    // Thiết lập lịch phân tích
+    const analysisTask = aiManager.scheduleAnalysis(cameraId, snapshotFunction, cronExpression, options);
+    
+    return res.json({
+      success: true,
+      message: "Đã thiết lập lịch phân tích thành công",
+      schedule: cronExpression
+    });
+  } catch (error) {
+    console.error("Lỗi khi thiết lập lịch phân tích:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi khi thiết lập lịch phân tích: " + error.message
+    });
+  }
+});
+
+app.get('/api/check-ai-status', async (req, res) => {
+  try {
+    const available = await aiManager.isDeepStackAvailable();
+    return res.json({ available });
+  } catch (error) {
+    console.error("Lỗi khi kiểm tra trạng thái AI:", error);
+    return res.json({ available: false, error: error.message });
+  }
+});
+
+app.get('/api/get-analytics-events', async (req, res) => {
+  try {
+    const events = aiManager.getAnalyticsEvents({
+      startTime: req.query.startTime ? new Date(req.query.startTime) : null,
+      endTime: req.query.endTime ? new Date(req.query.endTime) : null,
+      eventType: req.query.eventType || null
+    });
+    
+    return res.json({
+      success: true,
+      events
+    });
+  } catch (error) {
+    console.error("Lỗi khi lấy sự kiện phân tích:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi khi lấy sự kiện phân tích: " + error.message
+    });
+  }
+});
+
+app.get('/api/get-attendance-report', async (req, res) => {
+  try {
+    const date = req.query.date || null;
+    const report = aiManager.getAttendanceReport(date);
+    
+    return res.json({
+      success: true,
+      report
+    });
+  } catch (error) {
+    console.error("Lỗi khi lấy báo cáo chấm công:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi khi lấy báo cáo chấm công: " + error.message
     });
   }
 });

@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phân Tích Video AI</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <!-- Date Picker -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            padding-top: 20px;
+            background-color: #f8f9fa;
+        }
+        .navbar {
+            margin-bottom: 20px;
+        }
+        .card {
+            margin-bottom: 20px;
+            border: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .card-header {
+            background-color: #343a40;
+            color: white;
+            font-weight: 500;
+        }
+        .detection-box {
+            position: absolute;
+            border: 2px solid red;
+            border-radius: 3px;
+            background-color: rgba(255, 0, 0, 0.2);
+            pointer-events: none;
+        }
+        .detection-label {
+            position: absolute;
+            top: -25px;
+            left: 0;
+            background-color: red;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .person-box {
+            border-color: #28a745;
+            background-color: rgba(40, 167, 69, 0.2);
+        }
+        .person-label {
+            background-color: #28a745;
+        }
+        .face-box {
+            border-color: #17a2b8;
+            background-color: rgba(23, 162, 184, 0.2);
+        }
+        .face-label {
+            background-color: #17a2b8;
+        }
+        .plate-box {
+            border-color: #ffc107;
+            background-color: rgba(255, 193, 7, 0.2);
+        }
+        .plate-label {
+            background-color: #ffc107;
+            color: #000;
+        }
+        .object-box {
+            border-color: #6f42c1;
+            background-color: rgba(111, 66, 193, 0.2);
+        }
+        .object-label {
+            background-color: #6f42c1;
+        }
+        .analysis-container {
+            position: relative;
+        }
+        .analysis-image {
+            max-width: 100%;
+            border: 1px solid #ddd;
+        }
+        .btn-group-toggle .btn {
+            margin-right: 5px;
+        }
+        .page-title {
+            margin-bottom: 30px;
+            color: #212529;
+            font-weight: 600;
+        }
+        .nav-pills .nav-link.active {
+            background-color: #343a40;
+        }
+        .stat-card {
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+        .stat-icon {
+            font-size: 2.5rem;
+            color: rgba(0, 0, 0, 0.15);
+        }
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+        }
+        .alert-section {
+            border-left: 5px solid #dc3545;
+        }
+        .event-item {
+            border-left: 4px solid #6c757d;
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            background-color: #f8f9fa;
+            transition: all 0.2s ease;
+        }
+        .event-item:hover {
+            background-color: #e9ecef;
+            transform: translateX(5px);
+        }
+        .event-item.event-person {
+            border-left-color: #28a745;
+        }
+        .event-item.event-face {
+            border-left-color: #17a2b8;
+        }
+        .event-item.event-plate {
+            border-left-color: #ffc107;
+        }
+        .event-item.event-attendance {
+            border-left-color: #6f42c1;
+        }
+        .event-time {
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+        .chart-container {
+            height: 300px;
+        }
+        .analysis-options-card {
+            position: sticky;
+            top: 20px;
+        }
+        .history-timeline {
+            position: relative;
+            max-height: 400px;
+            overflow-y: auto;
+            padding-left: 20px;
+        }
+        .history-timeline::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 9px;
+            width: 2px;
+            background-color: #dee2e6;
+        }
+        .table-hover tbody tr:hover {
+            background-color: rgba(0, 0, 0, 0.075);
+        }
+        .attendance-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background-color: #007bff;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row mb-4">
+            <div class="col">
+                <h1 class="page-title">Phân Tích Video AI</h1>
+            </div>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <ul class="nav nav-pills">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/dashboard">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/vlc">VLC Viewer</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/analytics">Phân Tích AI</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Trang chủ</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-9">
+                <!-- Thống kê tổng quan -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card stat-card bg-light">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h6 class="card-title text-muted">Người</h6>
+                                        <p class="stat-value mb-0" id="personCount">0</p>
+                                    </div>
+                                    <div class="stat-icon">
+                                        <i class="bi bi-people-fill"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card stat-card bg-light">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h6 class="card-title text-muted">Khuôn Mặt</h6>
+                                        <p class="stat-value mb-0" id="faceCount">0</p>
+                                    </div>
+                                    <div class="stat-icon">
+                                        <i class="bi bi-person-badge"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card stat-card bg-light">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h6 class="card-title text-muted">Biển Số</h6>
+                                        <p class="stat-value mb-0" id="licensePlateCount">0</p>
+                                    </div>
+                                    <div class="stat-icon">
+                                        <i class="bi bi-card-text"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card stat-card bg-light">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h6 class="card-title text-muted">Đối Tượng</h6>
+                                        <p class="stat-value mb-0" id="objectCount">0</p>
+                                    </div>
+                                    <div class="stat-icon">
+                                        <i class="bi bi-box"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tab điều hướng phân tích -->
+                <ul class="nav nav-tabs mb-3" id="analysisTab" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="realtime-tab" data-bs-toggle="tab" data-bs-target="#realtime" type="button" role="tab" aria-controls="realtime" aria-selected="true">Phân Tích Thời Gian Thực</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="attendance-tab" data-bs-toggle="tab" data-bs-target="#attendance" type="button" role="tab" aria-controls="attendance" aria-selected="false">Chấm Công</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="anpr-tab" data-bs-toggle="tab" data-bs-target="#anpr" type="button" role="tab" aria-controls="anpr" aria-selected="false">Biển Số Xe</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="reports-tab" data-bs-toggle="tab" data-bs-target="#reports" type="button" role="tab" aria-controls="reports" aria-selected="false">Báo Cáo</button>
+                    </li>
+                </ul>
+                
+                <!-- Tab nội dung -->
+                <div class="tab-content" id="analysisTabContent">
+                    <!-- Tab phân tích thời gian thực -->
+                    <div class="tab-pane fade show active" id="realtime" role="tabpanel" aria-labelledby="realtime-tab">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>Phân Tích Hình Ảnh</span>
+                                <div>
+                                    <button id="analyzeSnapshotBtn" class="btn btn-primary btn-sm">
+                                        <i class="bi bi-camera-fill"></i> Chụp & Phân Tích
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="text-center mb-3" id="loadingAnalysis" style="display: none;">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Đang phân tích...</span>
+                                    </div>
+                                    <p class="mt-2">Đang phân tích hình ảnh...</p>
+                                </div>
+                                
+                                <div id="analysisResults" style="display: none;">
+                                    <div class="analysis-container" id="analysisImageContainer">
+                                        <img id="analysisImage" src="" alt="Ảnh phân tích" class="analysis-image">
+                                        <!-- Detection boxes will be added here dynamically -->
+                                    </div>
+                                    
+                                    <div class="mt-3">
+                                        <p class="mb-1"><strong>Thời gian:</strong> <span id="analysisTimestamp"></span></p>
+                                        <p class="mb-1"><strong>Camera:</strong> <span id="analysisCamera"></span></p>
+                                    </div>
+                                    
+                                    <div class="mt-3">
+                                        <h5>Kết Quả Phân Tích</h5>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="card mb-3">
+                                                    <div class="card-body">
+                                                        <h6 class="card-title">
+                                                            <i class="bi bi-people-fill text-success me-2"></i>
+                                                            Người
+                                                        </h6>
+                                                        <p class="card-text" id="detectedPersons">Không phát hiện người</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="card mb-3">
+                                                    <div class="card-body">
+                                                        <h6 class="card-title">
+                                                            <i class="bi bi-person-badge text-info me-2"></i>
+                                                            Khuôn Mặt
+                                                        </h6>
+                                                        <p class="card-text" id="detectedFaces">Không nhận diện được khuôn mặt</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="card mb-3">
+                                                    <div class="card-body">
+                                                        <h6 class="card-title">
+                                                            <i class="bi bi-card-text text-warning me-2"></i>
+                                                            Biển Số Xe
+                                                        </h6>
+                                                        <p class="card-text" id="detectedLicensePlates">Không phát hiện biển số xe</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="card mb-3">
+                                                    <div class="card-body">
+                                                        <h6 class="card-title">
+                                                            <i class="bi bi-box text-purple me-2"></i>
+                                                            Đối Tượng
+                                                        </h6>
+                                                        <p class="card-text" id="detectedObjects">Không phát hiện đối tượng</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div id="noAnalysisResults" class="text-center py-5">
+                                    <i class="bi bi-image text-muted" style="font-size: 5rem;"></i>
+                                    <p class="mt-3">Chưa có phân tích nào. Hãy chọn một camera và nhấn "Chụp & Phân Tích"</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card mt-4">
+                            <div class="card-header">
+                                <span>Sự Kiện Gần Đây</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="history-timeline" id="recentEvents">
+                                    <!-- Events will be added here dynamically -->
+                                    <p class="text-center text-muted" id="noRecentEvents">Chưa có sự kiện nào</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Tab chấm công -->
+                    <div class="tab-pane fade" id="attendance" role="tabpanel" aria-labelledby="attendance-tab">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>Báo Cáo Chấm Công</span>
+                                <div>
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control" id="attendanceDate" placeholder="Chọn ngày">
+                                        <button class="btn btn-outline-secondary" type="button" id="getAttendanceReportBtn">
+                                            <i class="bi bi-search"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="text-center mb-3" id="loadingAttendance" style="display: none;">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Đang tải...</span>
+                                    </div>
+                                    <p class="mt-2">Đang tải dữ liệu chấm công...</p>
+                                </div>
+                                
+                                <div id="attendanceResults" style="display: none;">
+                                    <div class="row mb-4">
+                                        <div class="col-md-4">
+                                            <div class="card bg-light">
+                                                <div class="card-body text-center">
+                                                    <h5 class="card-title">Tổng Người</h5>
+                                                    <h2 id="totalAttendance">0</h2>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="card bg-light">
+                                                <div class="card-body text-center">
+                                                    <h5 class="card-title">Giờ Bắt Đầu</h5>
+                                                    <h2 id="earliestTime">--:--</h2>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="card bg-light">
+                                                <div class="card-body text-center">
+                                                    <h5 class="card-title">Giờ Kết Thúc</h5>
+                                                    <h2 id="latestTime">--:--</h2>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="table-responsive">
+                                        <table class="table table-hover table-striped">
+                                            <thead class="table-dark">
+                                                <tr>
+                                                    <th scope="col">Họ Tên</th>
+                                                    <th scope="col">Giờ Vào</th>
+                                                    <th scope="col">Giờ Ra</th>
+                                                    <th scope="col">Tổng Giờ</th>
+                                                    <th scope="col">Lần Xuất Hiện</th>
+                                                    <th scope="col">Camera</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="attendanceTable">
+                                                <!-- Attendance records will be added here -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                
+                                <div id="noAttendanceResults" class="text-center py-5">
+                                    <i class="bi bi-calendar3 text-muted" style="font-size: 5rem;"></i>
+                                    <p class="mt-3">Chưa có dữ liệu chấm công. Hãy chọn ngày và nhấn nút tìm kiếm.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Tab ANPR (biển số xe) -->
+                    <div class="tab-pane fade" id="anpr" role="tabpanel" aria-labelledby="anpr-tab">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>Theo Dõi Biển Số Xe</span>
+                                <div>
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control" id="plateSearchInput" placeholder="Tìm kiếm biển số">
+                                        <button class="btn btn-outline-secondary" type="button" id="searchPlateBtn">
+                                            <i class="bi bi-search"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="text-center mb-3" id="loadingANPR" style="display: none;">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Đang tải...</span>
+                                    </div>
+                                    <p class="mt-2">Đang tải dữ liệu biển số xe...</p>
+                                </div>
+                                
+                                <div id="anprResults" style="display: none;">
+                                    <div class="table-responsive">
+                                        <table class="table table-hover">
+                                            <thead class="table-dark">
+                                                <tr>
+                                                    <th scope="col">Biển Số</th>
+                                                    <th scope="col">Thời Gian</th>
+                                                    <th scope="col">Camera</th>
+                                                    <th scope="col">Độ Tin Cậy</th>
+                                                    <th scope="col">Hình Ảnh</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="anprTable">
+                                                <!-- License plate records will be added here -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                
+                                <div id="noANPRResults" class="text-center py-5">
+                                    <i class="bi bi-card-text text-muted" style="font-size: 5rem;"></i>
+                                    <p class="mt-3">Chưa có dữ liệu biển số xe nào được ghi nhận.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Tab báo cáo -->
+                    <div class="tab-pane fade" id="reports" role="tabpanel" aria-labelledby="reports-tab">
+                        <div class="card">
+                            <div class="card-header">
+                                <span>Báo Cáo & Thống Kê</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="card mb-3">
+                                            <div class="card-header bg-light">
+                                                <h6 class="mb-0">Phân Bố Người Theo Thời Gian</h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="chart-container">
+                                                    <canvas id="personDensityChart"></canvas>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card mb-3">
+                                            <div class="card-header bg-light">
+                                                <h6 class="mb-0">Phân Bố Loại Đối Tượng</h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="chart-container">
+                                                    <canvas id="objectTypesChart"></canvas>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="card mb-3">
+                                            <div class="card-header bg-light">
+                                                <h6 class="mb-0">Xe Di Chuyển Theo Ngày</h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="chart-container">
+                                                    <canvas id="vehicleMovementChart"></canvas>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card mb-3">
+                                            <div class="card-header bg-light">
+                                                <h6 class="mb-0">Camera Hoạt Động</h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="chart-container">
+                                                    <canvas id="cameraActivityChart"></canvas>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-3">
+                <!-- Card lựa chọn camera -->
+                <div class="card mb-4 analysis-options-card">
+                    <div class="card-header">
+                        <span>Chọn Camera</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="cameraSelect" class="form-label">Camera</label>
+                            <select class="form-select" id="cameraSelect">
+                                <option value="">Chọn camera...</option>
+                                <!-- Camera options will be loaded dynamically -->
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Tùy Chọn Phân Tích</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="detectPersonsCheck" checked>
+                                <label class="form-check-label" for="detectPersonsCheck">
+                                    Phát hiện người
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="detectFacesCheck" checked>
+                                <label class="form-check-label" for="detectFacesCheck">
+                                    Nhận diện khuôn mặt
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="detectPlatesCheck" checked>
+                                <label class="form-check-label" for="detectPlatesCheck">
+                                    Biển số xe (ANPR)
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="detectObjectsCheck" checked>
+                                <label class="form-check-label" for="detectObjectsCheck">
+                                    Nhận diện đối tượng
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Tự Động Phân Tích</label>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="autoAnalysisSwitch">
+                                <label class="form-check-label" for="autoAnalysisSwitch">
+                                    Bật phân tích tự động
+                                </label>
+                            </div>
+                            
+                            <div id="scheduleOptions" class="mt-2" style="display: none;">
+                                <select class="form-select form-select-sm mb-2" id="scheduleInterval">
+                                    <option value="30">Mỗi 30 giây</option>
+                                    <option value="60" selected>Mỗi 1 phút</option>
+                                    <option value="300">Mỗi 5 phút</option>
+                                    <option value="600">Mỗi 10 phút</option>
+                                    <option value="1800">Mỗi 30 phút</option>
+                                </select>
+                                
+                                <button class="btn btn-primary btn-sm w-100" id="startScheduleBtn">
+                                    <i class="bi bi-play-circle"></i> Bắt Đầu Lịch Trình
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Trạng Thái AI</label>
+                            <div id="aiStatus" class="alert alert-warning">
+                                <i class="bi bi-exclamation-triangle-fill"></i>
+                                Chưa kết nối đến DeepStack API
+                            </div>
+                            <button class="btn btn-sm btn-outline-secondary w-100" id="checkAiStatusBtn">
+                                <i class="bi bi-arrow-repeat"></i> Kiểm Tra Kết Nối
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Date Picker -->
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Socket.IO -->
+    <script src="/socket.io/socket.io.js"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize flatpickr date picker
+            flatpickr("#attendanceDate", {
+                dateFormat: "Y-m-d",
+                defaultDate: new Date()
+            });
+            
+            // Toggle schedule options when auto-analysis switch is toggled
+            document.getElementById('autoAnalysisSwitch').addEventListener('change', function() {
+                document.getElementById('scheduleOptions').style.display = this.checked ? 'block' : 'none';
+            });
+            
+            // Initialize socket connection
+            const socket = io();
+            
+            // Get elements
+            const cameraSelect = document.getElementById('cameraSelect');
+            const analyzeSnapshotBtn = document.getElementById('analyzeSnapshotBtn');
+            const loadingAnalysis = document.getElementById('loadingAnalysis');
+            const analysisResults = document.getElementById('analysisResults');
+            const noAnalysisResults = document.getElementById('noAnalysisResults');
+            const analysisImage = document.getElementById('analysisImage');
+            const analysisImageContainer = document.getElementById('analysisImageContainer');
+            const analysisTimestamp = document.getElementById('analysisTimestamp');
+            const analysisCamera = document.getElementById('analysisCamera');
+            const detectedPersons = document.getElementById('detectedPersons');
+            const detectedFaces = document.getElementById('detectedFaces');
+            const detectedLicensePlates = document.getElementById('detectedLicensePlates');
+            const detectedObjects = document.getElementById('detectedObjects');
+            const recentEvents = document.getElementById('recentEvents');
+            const noRecentEvents = document.getElementById('noRecentEvents');
+            const personCount = document.getElementById('personCount');
+            const faceCount = document.getElementById('faceCount');
+            const licensePlateCount = document.getElementById('licensePlateCount');
+            const objectCount = document.getElementById('objectCount');
+            const aiStatus = document.getElementById('aiStatus');
+            const checkAiStatusBtn = document.getElementById('checkAiStatusBtn');
+            
+            // Options checkboxes
+            const detectPersonsCheck = document.getElementById('detectPersonsCheck');
+            const detectFacesCheck = document.getElementById('detectFacesCheck');
+            const detectPlatesCheck = document.getElementById('detectPlatesCheck');
+            const detectObjectsCheck = document.getElementById('detectObjectsCheck');
+            
+            // Auto-analysis options
+            const autoAnalysisSwitch = document.getElementById('autoAnalysisSwitch');
+            const scheduleInterval = document.getElementById('scheduleInterval');
+            const startScheduleBtn = document.getElementById('startScheduleBtn');
+            
+            // Load cameras from localStorage
+            const cameras = JSON.parse(localStorage.getItem('cameras')) || [];
+            
+            // Update camera select options
+            function loadCameraOptions() {
+                cameraSelect.innerHTML = '<option value="">Chọn camera...</option>';
+                
+                cameras.forEach((camera, index) => {
+                    const option = document.createElement('option');
+                    option.value = index;
+                    option.textContent = `${camera.name} (${camera.host})`;
+                    cameraSelect.appendChild(option);
+                });
+            }
+            
+            // Load camera options
+            loadCameraOptions();
+            
+            // Check AI status on load
+            checkAiStatus();
+            
+            // Load recent events
+            loadRecentEvents();
+            
+            // Analyze snapshot button click
+            analyzeSnapshotBtn.addEventListener('click', function() {
+                const cameraIndex = cameraSelect.value;
+                
+                if (!cameraIndex) {
+                    alert('Vui lòng chọn một camera để phân tích');
+                    return;
+                }
+                
+                const camera = cameras[cameraIndex];
+                
+                // Show loading
+                loadingAnalysis.style.display = 'block';
+                analysisResults.style.display = 'none';
+                noAnalysisResults.style.display = 'none';
+                
+                // Get analysis options
+                const options = {
+                    detectPersons: detectPersonsCheck.checked,
+                    detectFaces: detectFacesCheck.checked,
+                    detectLicensePlates: detectPlatesCheck.checked,
+                    detectObjects: detectObjectsCheck.checked
+                };
+                
+                // Request snapshot and analysis
+                fetch('/api/analyze-snapshot', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        cameraId: cameraIndex,
+                        type: camera.type,
+                        host: camera.host,
+                        port: camera.port,
+                        user: camera.user,
+                        pass: camera.pass,
+                        channel: camera.channel,
+                        options: options
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayAnalysisResults(data.results, camera.name);
+                        
+                        // Update counts
+                        updateCounts(data.results.summary);
+                        
+                        // Load recent events
+                        loadRecentEvents();
+                    } else {
+                        // Show error
+                        alert('Lỗi khi phân tích hình ảnh: ' + data.message);
+                        noAnalysisResults.style.display = 'block';
+                    }
+                    
+                    // Hide loading
+                    loadingAnalysis.style.display = 'none';
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Lỗi khi phân tích hình ảnh');
+                    loadingAnalysis.style.display = 'none';
+                    noAnalysisResults.style.display = 'block';
+                });
+            });
+            
+            // Display analysis results
+            function displayAnalysisResults(results, cameraName) {
+                // Update image source
+                analysisImage.src = results.imagePath;
+                
+                // Update metadata
+                analysisTimestamp.textContent = new Date(results.timestamp).toLocaleString();
+                analysisCamera.textContent = cameraName;
+                
+                // Clear existing detection boxes
+                const existingBoxes = analysisImageContainer.querySelectorAll('.detection-box');
+                existingBoxes.forEach(box => box.remove());
+                
+                // Update person detections
+                if (results.detections.persons && results.detections.persons.length > 0) {
+                    detectedPersons.innerHTML = `Phát hiện ${results.detections.persons.length} người`;
+                    
+                    // Create detection boxes for persons
+                    results.detections.persons.forEach((person, index) => {
+                        createDetectionBox(
+                            person.boundingBox,
+                            `Người ${index+1} (${person.confidence}%)`,
+                            'person',
+                            analysisImageContainer
+                        );
+                    });
+                } else {
+                    detectedPersons.innerHTML = 'Không phát hiện người';
+                }
+                
+                // Update face detections
+                if (results.detections.faces && results.detections.faces.length > 0) {
+                    detectedFaces.innerHTML = `Phát hiện ${results.detections.faces.length} khuôn mặt`;
+                    
+                    // Create detection boxes for faces
+                    results.detections.faces.forEach((face, index) => {
+                        let faceDescription = `Mặt ${index+1} (${face.confidence}%)`;
+                        if (face.gender || face.age) {
+                            faceDescription += '<br>';
+                            if (face.gender) faceDescription += `${face.gender}, `;
+                            if (face.age) faceDescription += `${face.age} tuổi`;
+                        }
+                        
+                        createDetectionBox(
+                            face.boundingBox,
+                            faceDescription,
+                            'face',
+                            analysisImageContainer
+                        );
+                    });
+                } else {
+                    detectedFaces.innerHTML = 'Không nhận diện được khuôn mặt';
+                }
+                
+                // Update license plate detections
+                if (results.detections.licensePlates && results.detections.licensePlates.length > 0) {
+                    detectedLicensePlates.innerHTML = `Phát hiện ${results.detections.licensePlates.length} biển số xe`;
+                    
+                    // Create detection boxes for license plates
+                    results.detections.licensePlates.forEach((plate, index) => {
+                        createDetectionBox(
+                            plate.boundingBox,
+                            `${plate.text} (${plate.confidence}%)`,
+                            'plate',
+                            analysisImageContainer
+                        );
+                    });
+                } else {
+                    detectedLicensePlates.innerHTML = 'Không phát hiện biển số xe';
+                }
+                
+                // Update object detections
+                if (results.detections.objects && results.detections.objects.length > 0) {
+                    detectedObjects.innerHTML = `Phát hiện ${results.detections.objects.length} đối tượng`;
+                    
+                    // Create detection boxes for objects
+                    results.detections.objects.forEach((object, index) => {
+                        createDetectionBox(
+                            object.boundingBox,
+                            `${object.label} (${object.confidence}%)`,
+                            'object',
+                            analysisImageContainer
+                        );
+                    });
+                } else {
+                    detectedObjects.innerHTML = 'Không phát hiện đối tượng';
+                }
+                
+                // Show results
+                analysisResults.style.display = 'block';
+                noAnalysisResults.style.display = 'none';
+            }
+            
+            // Create detection box
+            function createDetectionBox(boundingBox, label, type, container) {
+                // Get container dimensions
+                const containerWidth = container.clientWidth;
+                const containerHeight = analysisImage.clientHeight;
+                
+                // Calculate position and size
+                const x = (boundingBox.x_min / 100) * containerWidth;
+                const y = (boundingBox.y_min / 100) * containerHeight;
+                const width = ((boundingBox.x_max - boundingBox.x_min) / 100) * containerWidth;
+                const height = ((boundingBox.y_max - boundingBox.y_min) / 100) * containerHeight;
+                
+                // Create detection box
+                const box = document.createElement('div');
+                box.className = `detection-box ${type}-box`;
+                box.style.left = `${x}px`;
+                box.style.top = `${y}px`;
+                box.style.width = `${width}px`;
+                box.style.height = `${height}px`;
+                
+                // Create label
+                const labelEl = document.createElement('div');
+                labelEl.className = `detection-label ${type}-label`;
+                labelEl.innerHTML = label;
+                box.appendChild(labelEl);
+                
+                // Add to container
+                container.appendChild(box);
+            }
+            
+            // Start auto-analysis schedule
+            startScheduleBtn.addEventListener('click', function() {
+                const cameraIndex = cameraSelect.value;
+                const interval = parseInt(scheduleInterval.value);
+                
+                if (!cameraIndex) {
+                    alert('Vui lòng chọn một camera để lập lịch phân tích');
+                    return;
+                }
+                
+                if (!interval) {
+                    alert('Vui lòng chọn khoảng thời gian phân tích');
+                    return;
+                }
+                
+                const camera = cameras[cameraIndex];
+                
+                // Get analysis options
+                const options = {
+                    detectPersons: detectPersonsCheck.checked,
+                    detectFaces: detectFacesCheck.checked,
+                    detectLicensePlates: detectPlatesCheck.checked,
+                    detectObjects: detectObjectsCheck.checked
+                };
+                
+                // Request to start schedule
+                fetch('/api/start-analysis-schedule', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        cameraId: cameraIndex,
+                        type: camera.type,
+                        host: camera.host,
+                        port: camera.port,
+                        user: camera.user,
+                        pass: camera.pass,
+                        channel: camera.channel,
+                        interval: interval,
+                        options: options
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Lịch phân tích đã được thiết lập thành công!');
+                        startScheduleBtn.disabled = true;
+                        startScheduleBtn.textContent = 'Đang Chạy...';
+                    } else {
+                        alert('Lỗi khi thiết lập lịch phân tích: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Lỗi khi thiết lập lịch phân tích');
+                });
+            });
+            
+            // Check AI status
+            function checkAiStatus() {
+                fetch('/api/check-ai-status')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.available) {
+                            aiStatus.className = 'alert alert-success';
+                            aiStatus.innerHTML = '<i class="bi bi-check-circle-fill"></i> DeepStack API đang hoạt động';
+                        } else {
+                            aiStatus.className = 'alert alert-danger';
+                            aiStatus.innerHTML = '<i class="bi bi-x-circle-fill"></i> DeepStack API không khả dụng';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        aiStatus.className = 'alert alert-danger';
+                        aiStatus.innerHTML = '<i class="bi bi-x-circle-fill"></i> Lỗi khi kiểm tra trạng thái API';
+                    });
+            }
+            
+            // Check AI status button click
+            checkAiStatusBtn.addEventListener('click', checkAiStatus);
+            
+            // Load recent events
+            function loadRecentEvents() {
+                fetch('/api/get-analytics-events')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.events && data.events.length > 0) {
+                            // Hide no events message
+                            noRecentEvents.style.display = 'none';
+                            
+                            // Clear existing events
+                            recentEvents.innerHTML = '';
+                            
+                            // Add events
+                            data.events.forEach(event => {
+                                const eventItem = document.createElement('div');
+                                let eventClass = 'event-item';
+                                let icon = '';
+                                let content = '';
+                                
+                                // Format based on event type
+                                switch (event.type) {
+                                    case 'PERSON_DETECTED':
+                                        eventClass += ' event-person';
+                                        icon = '<i class="bi bi-person-fill text-success me-2"></i>';
+                                        content = `Phát hiện ${event.data.personCount} người`;
+                                        break;
+                                    case 'FACE_DETECTED':
+                                        eventClass += ' event-face';
+                                        icon = '<i class="bi bi-person-badge-fill text-info me-2"></i>';
+                                        content = `Phát hiện ${event.data.faceCount} khuôn mặt`;
+                                        break;
+                                    case 'LICENSE_PLATE_DETECTED':
+                                        eventClass += ' event-plate';
+                                        icon = '<i class="bi bi-card-text text-warning me-2"></i>';
+                                        content = `Phát hiện biển số: ${event.data.plateNumber}`;
+                                        break;
+                                    case 'OBJECTS_DETECTED':
+                                        eventClass += ' event-object';
+                                        icon = '<i class="bi bi-box me-2"></i>';
+                                        content = `Phát hiện ${event.data.objectCount} đối tượng`;
+                                        break;
+                                    case 'ATTENDANCE':
+                                        eventClass += ' event-attendance';
+                                        icon = '<i class="bi bi-person-check-fill text-primary me-2"></i>';
+                                        content = `Chấm công: ${event.data.personName}`;
+                                        break;
+                                    default:
+                                        icon = '<i class="bi bi-info-circle me-2"></i>';
+                                        content = `Sự kiện: ${event.type}`;
+                                }
+                                
+                                // Format time
+                                const eventTime = new Date(event.timestamp).toLocaleString();
+                                
+                                // Create event item
+                                eventItem.className = eventClass;
+                                eventItem.innerHTML = `
+                                    ${icon}
+                                    <strong>${content}</strong>
+                                    <div class="event-time">
+                                        <i class="bi bi-clock me-1"></i>
+                                        ${eventTime}
+                                    </div>
+                                    <div class="text-muted small">
+                                        <i class="bi bi-camera me-1"></i>
+                                        Camera ${event.cameraId}
+                                    </div>
+                                `;
+                                
+                                recentEvents.appendChild(eventItem);
+                            });
+                        } else {
+                            noRecentEvents.style.display = 'block';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        noRecentEvents.style.display = 'block';
+                    });
+            }
+            
+            // Update stats counters
+            function updateCounts(summary) {
+                personCount.textContent = summary.personCount || '0';
+                faceCount.textContent = summary.faceCount || '0';
+                licensePlateCount.textContent = summary.licensePlateCount || '0';
+                objectCount.textContent = summary.objectCount || '0';
+            }
+            
+            // Socket events
+            socket.on('analytics-event', function(data) {
+                // Reload events when a new analytics event is received
+                loadRecentEvents();
+                
+                // Update counts if the event contains count data
+                if (data.counts) {
+                    updateCounts(data.counts);
+                }
+            });
+            
+            // Initialize Charts
+            function initCharts() {
+                // Person density chart
+                const personDensityCtx = document.getElementById('personDensityChart').getContext('2d');
+                const personDensityChart = new Chart(personDensityCtx, {
+                    type: 'line',
+                    data: {
+                        labels: ['00:00', '03:00', '06:00', '09:00', '12:00', '15:00', '18:00', '21:00'],
+                        datasets: [{
+                            label: 'Số Người',
+                            data: [0, 0, 2, 5, 8, 10, 7, 3],
+                            borderColor: 'rgba(40, 167, 69, 1)',
+                            backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        }
+                    }
+                });
+                
+                // Object types chart
+                const objectTypesCtx = document.getElementById('objectTypesChart').getContext('2d');
+                const objectTypesChart = new Chart(objectTypesCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Người', 'Xe Hơi', 'Xe Máy', 'Động Vật', 'Khác'],
+                        datasets: [{
+                            data: [30, 25, 20, 10, 15],
+                            backgroundColor: [
+                                'rgba(40, 167, 69, 0.8)',
+                                'rgba(0, 123, 255, 0.8)',
+                                'rgba(220, 53, 69, 0.8)',
+                                'rgba(255, 193, 7, 0.8)',
+                                'rgba(108, 117, 125, 0.8)'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                    }
+                });
+                
+                // Vehicle movement chart
+                const vehicleMovementCtx = document.getElementById('vehicleMovementChart').getContext('2d');
+                const vehicleMovementChart = new Chart(vehicleMovementCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'],
+                        datasets: [{
+                            label: 'Số Lượt Xe',
+                            data: [65, 59, 80, 81, 90, 55, 40],
+                            backgroundColor: 'rgba(255, 193, 7, 0.8)'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        }
+                    }
+                });
+                
+                // Camera activity chart
+                const cameraActivityCtx = document.getElementById('cameraActivityChart').getContext('2d');
+                const cameraActivityChart = new Chart(cameraActivityCtx, {
+                    type: 'radar',
+                    data: {
+                        labels: ['Camera 1', 'Camera 2', 'Camera 3', 'Camera 4', 'Camera 5'],
+                        datasets: [{
+                            label: 'Hoạt Động',
+                            data: [90, 75, 80, 60, 85],
+                            backgroundColor: 'rgba(23, 162, 184, 0.2)',
+                            borderColor: 'rgba(23, 162, 184, 1)',
+                            pointBackgroundColor: 'rgba(23, 162, 184, 1)'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            r: {
+                                beginAtZero: true,
+                                max: 100
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Initialize charts
+            initCharts();
+        });
+    </script>
+</body>
+</html>
