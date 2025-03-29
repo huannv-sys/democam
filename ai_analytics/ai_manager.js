@@ -5,12 +5,12 @@
 const fs = require('fs-extra');
 const path = require('path');
 const cron = require('node-cron');
-const DeepStackAI = require('./deepstack');
+const YoloAI = require('./yolo');
 
 class AIManager {
   constructor() {
-    // Khởi tạo DeepStack AI
-    this.deepstack = new DeepStackAI();
+    // Khởi tạo YOLO AI
+    this.yolo = new YoloAI();
     
     // Thư mục lưu trữ snapshot và dữ liệu phân tích
     this.snapshotDir = path.join(__dirname, '..', 'public', 'snapshots');
@@ -310,7 +310,7 @@ class AIManager {
    * @returns {object} - Báo cáo chấm công
    */
   getAttendanceReport(date) {
-    return this.deepstack.getAttendanceReport(date);
+    return this.yolo.getAttendanceReport(date);
   }
   
   /**
@@ -319,7 +319,7 @@ class AIManager {
    * @returns {Array} - Danh sách sự kiện
    */
   getAnalyticsEvents(options = {}) {
-    return this.deepstack.getEvents(
+    return this.yolo.getEvents(
       options.eventType || null,
       options.startTime || null,
       options.endTime || null
@@ -327,18 +327,14 @@ class AIManager {
   }
   
   /**
-   * Kiểm tra DeepStack API có khả dụng không
-   * @returns {Promise<boolean>} - true nếu API hoạt động, false nếu không
+   * Kiểm tra mô hình YOLO có khả dụng không
+   * @returns {Promise<boolean>} - true nếu mô hình đã sẵn sàng, false nếu không
    */
   async isDeepStackAvailable() {
     try {
-      // Tạm thời trả về true để phát triển UI trước
-      // Sau khi tích hợp DeepStack thật, sẽ sử dụng đoạn code dưới:
-      // return await this.deepstack.checkApiStatus();
-      console.log('Mô phỏng kiểm tra DeepStack API');
-      return true;
+      return await this.yolo.checkModelStatus();
     } catch (error) {
-      console.error('Lỗi khi kiểm tra trạng thái DeepStack API:', error);
+      console.error('Lỗi khi kiểm tra trạng thái mô hình YOLO:', error);
       return false;
     }
   }
