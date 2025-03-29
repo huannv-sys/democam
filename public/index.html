@@ -65,6 +65,12 @@
         .button-secondary:hover {
             background-color: #0b7dda;
         }
+        .button-danger {
+            background-color: #f44336;
+        }
+        .button-danger:hover {
+            background-color: #d32f2f;
+        }
         .status {
             margin-top: 15px;
             padding: 10px;
@@ -89,6 +95,23 @@
             border: 1px solid #ddd;
             box-shadow: 0 0 5px rgba(0,0,0,0.1);
         }
+        .video-container {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            flex-direction: column;
+            align-items: center;
+        }
+        .video-container canvas {
+            max-width: 100%;
+            border: 1px solid #ddd;
+            box-shadow: 0 0 5px rgba(0,0,0,0.1);
+        }
+        .button-container {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
         .hidden {
             display: none;
         }
@@ -108,6 +131,7 @@
             background-color: #f2f2f2;
         }
     </style>
+    <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
     <h1>Camera CCTV Viewer</h1>
@@ -179,6 +203,20 @@
                 <img id="snapshotImage" class="snapshot-image" src="" alt="Camera Snapshot">
             </div>
         </div>
+
+        <div class="section">
+            <h2>Live Video Stream</h2>
+            <p>Watch live video stream from your camera.</p>
+            <button type="button" id="startStream" class="button-secondary" disabled>Start Live Stream</button>
+            
+            <div id="streamStatus" class="status hidden"></div>
+            <div id="videoContainer" class="video-container hidden">
+                <canvas id="videoCanvas"></canvas>
+                <div class="button-container">
+                    <button type="button" id="stopStream" class="button-danger">Stop Stream</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -186,12 +224,30 @@
             // Elements
             const checkConnectionBtn = document.getElementById('checkConnection');
             const takeSnapshotBtn = document.getElementById('takeSnapshot');
+            const startStreamBtn = document.getElementById('startStream');
+            const stopStreamBtn = document.getElementById('stopStream');
             const connectionStatus = document.getElementById('connectionStatus');
             const deviceInfo = document.getElementById('deviceInfo');
             const deviceInfoTable = document.getElementById('deviceInfoTable');
             const snapshotStatus = document.getElementById('snapshotStatus');
             const snapshotContainer = document.getElementById('snapshotContainer');
             const snapshotImage = document.getElementById('snapshotImage');
+            const streamStatus = document.getElementById('streamStatus');
+            const videoContainer = document.getElementById('videoContainer');
+            const videoCanvas = document.getElementById('videoCanvas');
+
+            // Stream state
+            let streamingActive = false;
+            let streamId = null;
+            let wsConnection = null;
+            let jsmpegPlayer = null;
+            
+            // Socket.IO connection
+            const socket = io();
+            
+            socket.on('connect', () => {
+                console.log('Connected to server via Socket.IO');
+            });
             
             // Check connection
             checkConnectionBtn.addEventListener('click', async function() {
@@ -207,6 +263,7 @@
                 connectionStatus.textContent = 'Checking connection...';
                 deviceInfo.classList.add('hidden');
                 takeSnapshotBtn.disabled = true;
+                startStreamBtn.disabled = true;
                 
                 try {
                     const response = await fetch('/api/check-camera', {
@@ -240,6 +297,7 @@
                         
                         deviceInfo.classList.remove('hidden');
                         takeSnapshotBtn.disabled = false;
+                        startStreamBtn.disabled = false;
                     } else {
                         connectionStatus.textContent = data.message;
                         connectionStatus.classList.add('error');
@@ -292,6 +350,136 @@
                     snapshotStatus.classList.add('error');
                 }
             });
+
+            // Start live stream
+            startStreamBtn.addEventListener('click', async function() {
+                // Get form data
+                const type = document.getElementById('type').value;
+                const host = document.getElementById('host').value;
+                const port = document.getElementById('port').value;
+                const user = document.getElementById('user').value;
+                const pass = document.getElementById('pass').value;
+                const channel = document.getElementById('channel').value;
+                
+                // Update UI
+                streamStatus.classList.remove('hidden', 'success', 'error');
+                streamStatus.textContent = 'Starting live stream...';
+                videoContainer.classList.add('hidden');
+                startStreamBtn.disabled = true;
+                
+                try {
+                    const response = await fetch('/api/start-stream', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ type, host, port, user, pass, channel })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        streamStatus.textContent = data.message;
+                        streamStatus.classList.add('success');
+                        
+                        // Set up streaming
+                        streamId = data.streamId;
+                        
+                        // Connect to WebSocket stream
+                        const wsUrl = `ws://${window.location.hostname}:${data.wsPort}`;
+                        console.log(`Connecting to WebSocket stream at ${wsUrl}`);
+                        
+                        // Set canvas size
+                        videoCanvas.width = 640;
+                        videoCanvas.height = 480;
+                        
+                        try {
+                            // Load and initialize the jsmpeg player
+                            loadJsMpeg().then(() => {
+                                // Create new player
+                                jsmpegPlayer = new JSMpeg.Player(wsUrl, {
+                                    canvas: videoCanvas,
+                                    autoplay: true
+                                });
+                                
+                                // Show video container
+                                videoContainer.classList.remove('hidden');
+                                streamingActive = true;
+                            });
+                        } catch (error) {
+                            console.error('Error initializing player:', error);
+                            streamStatus.textContent = 'Error initializing video player: ' + error.message;
+                            streamStatus.classList.add('error');
+                            startStreamBtn.disabled = false;
+                        }
+                    } else {
+                        streamStatus.textContent = data.message;
+                        streamStatus.classList.add('error');
+                        startStreamBtn.disabled = false;
+                    }
+                } catch (error) {
+                    streamStatus.textContent = 'Error: ' + error.message;
+                    streamStatus.classList.add('error');
+                    startStreamBtn.disabled = false;
+                }
+            });
+            
+            // Stop live stream
+            stopStreamBtn.addEventListener('click', async function() {
+                if (!streamingActive || !streamId) return;
+                
+                // Update UI
+                streamStatus.classList.remove('hidden', 'success', 'error');
+                streamStatus.textContent = 'Stopping live stream...';
+                
+                try {
+                    // Cleanup player
+                    if (jsmpegPlayer) {
+                        jsmpegPlayer.destroy();
+                        jsmpegPlayer = null;
+                    }
+                    
+                    const response = await fetch('/api/stop-stream', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ streamId })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        streamStatus.textContent = 'Stream stopped successfully';
+                        streamStatus.classList.add('success');
+                        videoContainer.classList.add('hidden');
+                        startStreamBtn.disabled = false;
+                        streamingActive = false;
+                    } else {
+                        streamStatus.textContent = data.message;
+                        streamStatus.classList.add('error');
+                    }
+                } catch (error) {
+                    streamStatus.textContent = 'Error stopping stream: ' + error.message;
+                    streamStatus.classList.add('error');
+                }
+            });
+            
+            // Function to dynamically load jsmpeg
+            function loadJsMpeg() {
+                return new Promise((resolve, reject) => {
+                    if (window.JSMpeg) {
+                        resolve();
+                        return;
+                    }
+                    
+                    const script = document.createElement('script');
+                    script.src = 'https://cdn.jsdelivr.net/npm/jsmpeg@1.0.0/jsmpeg.min.js';
+                    script.onload = () => resolve();
+                    script.onerror = () => reject(new Error('Failed to load jsmpeg'));
+                    document.head.appendChild(script);
+                });
+            }
         });
     </script>
 </body>
