@@ -1,954 +1,940 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Camera Status Dashboard</title>
-    <script src="/socket.io/socket.io.js"></script>
+    <title>Dashboard</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
         body {
-            font-family: Arial, sans-serif;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            line-height: 1.6;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            padding-top: 20px;
+            background-color: #f8f9fa;
         }
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        .navbar {
             margin-bottom: 20px;
         }
-        h1 {
-            color: #333;
-            margin: 0;
+        .camera-card {
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+            border: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
-        .container {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
-        }
-        .card {
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            padding: 15px;
-            background-color: #f9f9f9;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: transform 0.2s;
-        }
-        .card:hover {
+        .camera-card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
         }
-        .card-header {
+        .camera-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 10px;
-        }
-        .card-title {
-            font-weight: bold;
-            font-size: 1.2rem;
-            margin: 0;
+            padding: 10px 15px;
+            background-color: #343a40;
+            color: white;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
         }
         .status-indicator {
-            display: inline-block;
             width: 12px;
             height: 12px;
             border-radius: 50%;
-            margin-right: 8px;
-            vertical-align: middle;
+            display: inline-block;
+            margin-right: 5px;
         }
         .status-online {
-            background-color: #4CAF50;
+            background-color: #28a745;
         }
         .status-offline {
-            background-color: #f44336;
+            background-color: #dc3545;
         }
-        .status-warning {
-            background-color: #ff9800;
+        .status-unknown {
+            background-color: #6c757d;
         }
-        .status-inactive {
-            background-color: #9e9e9e;
+        .camera-controls {
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-bottom-left-radius: 8px;
+            border-bottom-right-radius: 8px;
+            border-top: 1px solid #dee2e6;
         }
-        .card-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            margin-top: 15px;
-        }
-        .card-content {
-            margin-bottom: 15px;
-        }
-        .card-content p {
-            margin: 5px 0;
-        }
-        .snapshot-container {
+        .camera-thumbnail {
             width: 100%;
-            height: 160px;
-            background-color: #eee;
+            height: 200px;
+            background-color: #000;
             display: flex;
-            justify-content: center;
             align-items: center;
-            margin-bottom: 15px;
-            overflow: hidden;
-            border-radius: 3px;
+            justify-content: center;
+            color: white;
+            position: relative;
         }
-        .snapshot-container img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
+        .camera-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
-        .button {
-            background-color: #4CAF50;
+        .action-buttons {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            display: flex;
+            gap: 5px;
+        }
+        .action-button {
+            background-color: rgba(0, 0, 0, 0.7);
             color: white;
             border: none;
-            padding: 6px 12px;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 14px;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
         }
-        .button-secondary {
-            background-color: #2196F3;
+        .action-button:hover {
+            background-color: rgba(0, 0, 0, 0.9);
+            transform: scale(1.1);
         }
-        .button-danger {
-            background-color: #f44336;
+        .streaming-indicator {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(220, 53, 69, 0.8);
+            color: white;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: none;
         }
-        .button-inactive {
-            background-color: #9e9e9e;
+        .streaming-indicator.active {
+            display: block;
+            animation: pulse 1.5s infinite;
+            background-color: rgba(40, 167, 69, 0.8);
         }
-        .button:hover {
-            opacity: 0.9;
-        }
-        .button:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-        .add-camera {
-            padding: 20px;
-            background-color: #f9f9f9;
-            border: 2px dashed #ddd;
-            border-radius: 5px;
-            text-align: center;
-            cursor: pointer;
+        .add-camera-btn {
+            width: 100%;
+            height: 100%;
+            border: 2px dashed #dee2e6;
+            background-color: transparent;
+            border-radius: 8px;
             display: flex;
             flex-direction: column;
+            align-items: center;
             justify-content: center;
-            align-items: center;
-            height: 100%;
-            min-height: 200px;
+            padding: 30px;
+            transition: all 0.3s ease;
         }
-        .add-camera:hover {
-            background-color: #f0f0f0;
-            border-color: #ccc;
+        .add-camera-btn:hover {
+            background-color: #e9ecef;
+            border-color: #adb5bd;
         }
-        .add-camera i {
+        .add-camera-btn i {
             font-size: 48px;
-            color: #999;
-            margin-bottom: 10px;
-        }
-        .form-modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.5);
-            overflow-y: auto;
-        }
-        .form-content {
-            background-color: white;
-            margin: 5% auto;
-            padding: 20px;
-            width: 80%;
-            max-width: 500px;
-            border-radius: 5px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-        .form-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 10px;
-        }
-        .form-header h2 {
-            margin: 0;
-        }
-        .close-modal {
-            font-size: 24px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        .form-group {
             margin-bottom: 15px;
+            color: #6c757d;
         }
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
+        .camera-actions {
+            position: absolute;
+            top: 10px;
+            right: 10px;
         }
-        .form-group input, .form-group select {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 3px;
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+            100% {
+                opacity: 1;
+            }
         }
-        .form-actions {
-            text-align: right;
-            margin-top: 20px;
+        .dropdown-menu {
+            min-width: 12rem;
         }
-        .empty-state {
-            text-align: center;
-            padding: 40px;
-            color: #666;
+        .page-title {
+            margin-bottom: 30px;
+            color: #212529;
+            font-weight: 600;
         }
-        .empty-state img {
-            max-width: 200px;
+        .nav-pills .nav-link.active {
+            background-color: #343a40;
+        }
+        .viewport-warning {
+            display: none;
             margin-bottom: 20px;
         }
-        .refresh-button {
-            background-color: transparent;
-            border: 1px solid #ddd;
-            color: #333;
-            padding: 6px 12px;
-            border-radius: 3px;
-            cursor: pointer;
-        }
-        .refresh-button:hover {
-            background-color: #f0f0f0;
-        }
-        .statistics {
-            background-color: #f9f9f9;
-            border-radius: 5px;
-            padding: 15px;
-            margin-bottom: 20px;
-            display: flex;
-            justify-content: space-between;
-        }
-        .stat-item {
-            text-align: center;
-            flex: 1;
-        }
-        .stat-value {
-            font-size: 24px;
-            font-weight: bold;
-            display: block;
-            margin-bottom: 5px;
-        }
-        .stat-label {
-            font-size: 14px;
-            color: #666;
-        }
-        
-        /* Responsive design */
-        @media screen and (max-width: 768px) {
-            .container {
-                grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        @media (max-width: 992px) {
+            .viewport-warning {
+                display: block;
             }
-            .statistics {
-                flex-wrap: wrap;
-            }
-            .stat-item {
-                flex-basis: 50%;
-                margin-bottom: 15px;
-            }
-        }
-        
-        /* Icons */
-        .material-icons {
-            font-family: 'Material Icons';
-            font-weight: normal;
-            font-style: normal;
-            font-size: 24px;
-            line-height: 1;
-            text-transform: none;
-            letter-spacing: normal;
-            word-wrap: normal;
-            white-space: nowrap;
-            direction: ltr;
-            vertical-align: middle;
         }
     </style>
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 </head>
 <body>
-    <div class="header">
-        <h1>Camera Status Dashboard</h1>
-        <button id="refreshDashboard" class="refresh-button">
-            <span class="material-icons">refresh</span> Refresh
-        </button>
-    </div>
-    
-    <div class="statistics">
-        <div class="stat-item">
-            <span class="stat-value" id="totalCameras">0</span>
-            <span class="stat-label">Total Cameras</span>
-        </div>
-        <div class="stat-item">
-            <span class="stat-value" id="onlineCameras">0</span>
-            <span class="stat-label">Online</span>
-        </div>
-        <div class="stat-item">
-            <span class="stat-value" id="offlineCameras">0</span>
-            <span class="stat-label">Offline</span>
-        </div>
-        <div class="stat-item">
-            <span class="stat-value" id="activeStreams">0</span>
-            <span class="stat-label">Active Streams</span>
-        </div>
-    </div>
-    
-    <div class="container" id="camerasContainer">
-        <!-- Cameras will be added here dynamically -->
-        
-        <!-- Add camera card -->
-        <div class="add-camera" id="addCamera">
-            <span class="material-icons">add_circle</span>
-            <h3>Add New Camera</h3>
-        </div>
-    </div>
-    
-    <!-- Add Camera Form Modal -->
-    <div id="addCameraModal" class="form-modal">
-        <div class="form-content">
-            <div class="form-header">
-                <h2>Add New Camera</h2>
-                <span class="close-modal" id="closeModal">&times;</span>
+    <div class="container">
+        <div class="row mb-4">
+            <div class="col">
+                <h1 class="page-title">Dashboard Quản lý Camera</h1>
             </div>
-            <form id="cameraForm">
-                <div class="form-group">
-                    <label for="name">Camera Name:</label>
-                    <input type="text" id="name" name="name" placeholder="e.g., Front Door Camera" required>
-                </div>
-                <div class="form-group">
-                    <label for="type">Camera Type:</label>
-                    <select id="type" name="type" required>
-                        <option value="hikvision">Hikvision</option>
-                        <option value="dahua">Dahua</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="host">Host/IP/DDNS:</label>
-                    <input type="text" id="host" name="host" placeholder="e.g., 192.168.1.100 or mydomain.ddns.net" required>
-                </div>
-                <div class="form-group">
-                    <label for="port">Port:</label>
-                    <input type="number" id="port" name="port" value="80" placeholder="Default: 80" required>
-                </div>
-                <div class="form-group">
-                    <label for="user">Username:</label>
-                    <input type="text" id="user" name="user" placeholder="e.g., admin" required>
-                </div>
-                <div class="form-group">
-                    <label for="pass">Password:</label>
-                    <input type="password" id="pass" name="pass" required>
-                </div>
-                <div class="form-group">
-                    <label for="channel">Channel ID:</label>
-                    <select id="channel" name="channel">
-                        <option value="1">1 - Canal Básico / Basic Channel</option>
-                        <option value="101">101 - Hikvision/Dahua Canal 1 Principal / Main Channel 1</option>
-                        <option value="102">102 - Hikvision/Dahua Canal 1 Secundario / Sub Channel 1</option>
-                        <option value="201">201 - Hikvision/Dahua Canal 2 Principal / Main Channel 2</option>
-                        <option value="202">202 - Hikvision/Dahua Canal 2 Secundario / Sub Channel 2</option>
-                    </select>
-                </div>
-                
-                <div class="form-actions">
-                    <button type="button" class="button button-secondary" id="testConnection">Test Connection</button>
-                    <button type="submit" class="button">Add Camera</button>
-                </div>
-            </form>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <ul class="nav nav-pills">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/dashboard">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/vlc">VLC Viewer</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Trang chủ</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="alert alert-info viewport-warning">
+            <i class="bi bi-info-circle-fill me-2"></i>
+            Đối với trải nghiệm tốt nhất, hãy sử dụng màn hình với độ phân giải cao hơn hoặc xoay thiết bị của bạn sang chế độ ngang.
+        </div>
+        
+        <div class="row" id="camera-container">
+            <!-- Camera cards will be dynamically loaded here -->
         </div>
     </div>
+    
+    <!-- Modal for adding a new camera -->
+    <div class="modal fade" id="addCameraModal" tabindex="-1" aria-labelledby="addCameraModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addCameraModalLabel">Thêm Camera Mới</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="newCameraForm">
+                        <div class="mb-3">
+                            <label for="cameraName" class="form-label">Tên Camera</label>
+                            <input type="text" class="form-control" id="cameraName" placeholder="Nhập tên camera" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="cameraType" class="form-label">Loại Camera</label>
+                            <select class="form-select" id="cameraType" required>
+                                <option value="">Chọn loại camera</option>
+                                <option value="hikvision">Hikvision</option>
+                                <option value="dahua">Dahua</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="cameraHost" class="form-label">Địa chỉ IP/DDNS</label>
+                            <input type="text" class="form-control" id="cameraHost" placeholder="ví dụ: 192.168.1.100 hoặc camera.ddns.net" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="cameraPort" class="form-label">Cổng HTTP</label>
+                            <input type="number" class="form-control" id="cameraPort" placeholder="Mặc định: 80" value="80" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="cameraUser" class="form-label">Tên người dùng</label>
+                            <input type="text" class="form-control" id="cameraUser" placeholder="ví dụ: admin" value="admin" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="cameraPass" class="form-label">Mật khẩu</label>
+                            <input type="password" class="form-control" id="cameraPass" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="cameraChannel" class="form-label">Kênh</label>
+                            <select class="form-select" id="cameraChannel">
+                                <option value="101">101 - Hikvision Main Stream (Default)</option>
+                                <option value="102">102 - Hikvision Sub Stream</option>
+                                <option value="1">1 - Basic Channel</option>
+                                <option value="201">201 - Hikvision Channel 2 Main</option>
+                                <option value="202">202 - Hikvision Channel 2 Sub</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="button" class="btn btn-primary" id="saveNewCamera">Lưu Camera</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Add the streaming modal -->
+    <div class="modal fade" id="streamModal" tabindex="-1" aria-labelledby="streamModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="streamModalLabel">Xem Camera</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center" id="streamLoading">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Đang kết nối đến camera...</p>
+                    </div>
+                    <div id="streamError" class="alert alert-danger d-none"></div>
+                    <div id="streamContainer" class="d-none">
+                        <canvas id="videoCanvas" style="width: 100%; height: auto;"></canvas>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="stopStreamBtn">Dừng Stream</button>
+                    <button type="button" class="btn btn-primary" id="takeSnapshotBtn">Chụp Ảnh</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Latest JSMpeg for streaming -->
+    <script src="https://cdn.jsdelivr.net/npm/jsmpeg@0.2/jsmpeg.min.js"></script>
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Socket.IO -->
+    <script src="/socket.io/socket.io.js"></script>
     
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Socket.IO connection
+            // Initialize socket connection
             const socket = io();
             
-            // Elements
-            const camerasContainer = document.getElementById('camerasContainer');
-            const addCameraBtn = document.getElementById('addCamera');
-            const addCameraModal = document.getElementById('addCameraModal');
-            const closeModalBtn = document.getElementById('closeModal');
-            const cameraForm = document.getElementById('cameraForm');
-            const testConnectionBtn = document.getElementById('testConnection');
-            const refreshDashboardBtn = document.getElementById('refreshDashboard');
+            // Active streams
+            const activeStreams = {};
             
-            // Statistics elements
-            const totalCamerasEl = document.getElementById('totalCameras');
-            const onlineCamerasEl = document.getElementById('onlineCameras');
-            const offlineCamerasEl = document.getElementById('offlineCameras');
-            const activeStreamsEl = document.getElementById('activeStreams');
+            // Get elements
+            const cameraContainer = document.getElementById('camera-container');
+            const saveNewCameraBtn = document.getElementById('saveNewCamera');
             
-            // Mock data for cameras (will be replaced with real data from server)
-            let cameras = [];
-            let streams = {};
+            // Modal elements
+            const addCameraModal = new bootstrap.Modal(document.getElementById('addCameraModal'));
+            const streamModal = new bootstrap.Modal(document.getElementById('streamModal'));
+            const videoCanvas = document.getElementById('videoCanvas');
+            const streamLoading = document.getElementById('streamLoading');
+            const streamError = document.getElementById('streamError');
+            const streamContainer = document.getElementById('streamContainer');
+            const stopStreamBtn = document.getElementById('stopStreamBtn');
+            const takeSnapshotBtn = document.getElementById('takeSnapshotBtn');
             
-            // Open modal when Add Camera is clicked
-            addCameraBtn.addEventListener('click', function() {
-                addCameraModal.style.display = 'block';
-                // Reset form when opening
-                cameraForm.reset();
-                // Auto scroll to top of form
-                document.body.scrollTop = 0; // For Safari
-                document.documentElement.scrollTop = 0; // For Chrome, Firefox, IE and Opera
-            });
+            // Stream state
+            let currentStreamId = null;
+            let jsmpegPlayer = null;
             
-            // Close modal when X is clicked
-            closeModalBtn.addEventListener('click', function() {
-                addCameraModal.style.display = 'none';
-            });
+            // Load saved cameras from localStorage
+            let cameras = JSON.parse(localStorage.getItem('cameras')) || [];
             
-            // Close modal when clicking outside the modal
-            window.addEventListener('click', function(event) {
-                if (event.target === addCameraModal) {
-                    addCameraModal.style.display = 'none';
-                }
-            });
-            
-            // Test connection button in the form
-            testConnectionBtn.addEventListener('click', async function() {
-                const type = document.getElementById('type').value;
-                const host = document.getElementById('host').value;
-                const port = document.getElementById('port').value;
-                const user = document.getElementById('user').value;
-                const pass = document.getElementById('pass').value;
+            // Function to render cameras
+            function renderCameras() {
+                cameraContainer.innerHTML = '';
                 
-                if (!host || !user || !pass) {
-                    alert('Please fill out all required fields');
+                // Add each camera
+                cameras.forEach((camera, index) => {
+                    const cameraCard = document.createElement('div');
+                    cameraCard.className = 'col-lg-4 col-md-6 col-sm-12';
+                    
+                    cameraCard.innerHTML = `
+                        <div class="card camera-card" data-camera-id="${index}">
+                            <div class="camera-header">
+                                <div>
+                                    <span class="status-indicator status-unknown" id="status-${index}"></span>
+                                    <span class="camera-name">${camera.name}</span>
+                                </div>
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-dark dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <i class="bi bi-gear-fill"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        <li><a class="dropdown-item check-status" href="#" data-camera-id="${index}">
+                                            <i class="bi bi-check-circle me-2"></i>Kiểm tra trạng thái
+                                        </a></li>
+                                        <li><a class="dropdown-item take-snapshot" href="#" data-camera-id="${index}">
+                                            <i class="bi bi-camera me-2"></i>Chụp ảnh
+                                        </a></li>
+                                        <li><a class="dropdown-item view-stream" href="#" data-camera-id="${index}">
+                                            <i class="bi bi-play-circle me-2"></i>Xem trực tiếp
+                                        </a></li>
+                                        <li><a class="dropdown-item view-vlc" href="#" data-camera-id="${index}">
+                                            <i class="bi bi-camera-video me-2"></i>Xem qua VLC
+                                        </a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><a class="dropdown-item edit-camera" href="#" data-camera-id="${index}">
+                                            <i class="bi bi-pencil me-2"></i>Chỉnh sửa
+                                        </a></li>
+                                        <li><a class="dropdown-item delete-camera" href="#" data-camera-id="${index}">
+                                            <i class="bi bi-trash me-2"></i>Xóa
+                                        </a></li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="camera-thumbnail">
+                                <div class="streaming-indicator" id="streaming-${index}">LIVE</div>
+                                <div class="camera-placeholder" id="placeholder-${index}">
+                                    <i class="bi bi-camera-video" style="font-size: 48px;"></i>
+                                </div>
+                                <img src="" class="camera-image d-none" id="camera-image-${index}" alt="${camera.name}">
+                                <div class="action-buttons">
+                                    <button class="action-button refresh-thumbnail" data-camera-id="${index}">
+                                        <i class="bi bi-arrow-clockwise"></i>
+                                    </button>
+                                    <button class="action-button view-stream" data-camera-id="${index}">
+                                        <i class="bi bi-play-fill"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="camera-controls">
+                                <div class="row">
+                                    <div class="col-6">
+                                        <p class="mb-1"><strong>Loại:</strong> ${camera.type === 'hikvision' ? 'Hikvision' : 'Dahua'}</p>
+                                        <p class="mb-1"><strong>IP/DNS:</strong> ${camera.host}</p>
+                                    </div>
+                                    <div class="col-6">
+                                        <p class="mb-1"><strong>Cổng:</strong> ${camera.port}</p>
+                                        <p class="mb-1"><strong>Kênh:</strong> ${camera.channel}</p>
+                                    </div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-6">
+                                        <button class="btn btn-sm btn-primary w-100 check-status" data-camera-id="${index}">
+                                            <i class="bi bi-activity"></i> Kiểm tra
+                                        </button>
+                                    </div>
+                                    <div class="col-6">
+                                        <button class="btn btn-sm btn-success w-100 take-snapshot" data-camera-id="${index}">
+                                            <i class="bi bi-camera"></i> Chụp ảnh
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    cameraContainer.appendChild(cameraCard);
+                });
+                
+                // Add the "Add Camera" card
+                const addCameraCard = document.createElement('div');
+                addCameraCard.className = 'col-lg-4 col-md-6 col-sm-12';
+                addCameraCard.innerHTML = `
+                    <button class="add-camera-btn h-100" data-bs-toggle="modal" data-bs-target="#addCameraModal">
+                        <i class="bi bi-plus-circle"></i>
+                        <h5>Thêm Camera Mới</h5>
+                        <p class="text-muted">Nhấp vào đây để thiết lập và thêm camera mới vào hệ thống</p>
+                    </button>
+                `;
+                cameraContainer.appendChild(addCameraCard);
+                
+                // Add event listeners to camera actions
+                document.querySelectorAll('.check-status').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        const cameraId = this.getAttribute('data-camera-id');
+                        checkCameraStatus(cameraId);
+                    });
+                });
+                
+                document.querySelectorAll('.take-snapshot').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        const cameraId = this.getAttribute('data-camera-id');
+                        takeSnapshot(cameraId);
+                    });
+                });
+                
+                document.querySelectorAll('.view-stream').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        const cameraId = this.getAttribute('data-camera-id');
+                        openStream(cameraId);
+                    });
+                });
+                
+                document.querySelectorAll('.view-vlc').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        const cameraId = this.getAttribute('data-camera-id');
+                        openVlcViewer(cameraId);
+                    });
+                });
+                
+                document.querySelectorAll('.refresh-thumbnail').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        const cameraId = this.getAttribute('data-camera-id');
+                        takeSnapshot(cameraId, true);
+                    });
+                });
+                
+                document.querySelectorAll('.edit-camera').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        const cameraId = this.getAttribute('data-camera-id');
+                        editCamera(cameraId);
+                    });
+                });
+                
+                document.querySelectorAll('.delete-camera').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        const cameraId = this.getAttribute('data-camera-id');
+                        deleteCamera(cameraId);
+                    });
+                });
+            }
+            
+            // Function to check camera status
+            function checkCameraStatus(cameraId) {
+                const camera = cameras[cameraId];
+                const statusIndicator = document.getElementById(`status-${cameraId}`);
+                
+                // Reset status
+                statusIndicator.className = 'status-indicator status-unknown';
+                
+                // Check status via Socket.IO
+                socket.emit('check-camera', {
+                    cameraId: cameraId,
+                    type: camera.type,
+                    host: camera.host,
+                    port: camera.port,
+                    user: camera.user,
+                    pass: camera.pass
+                });
+                
+                // Notify user
+                showToast(`Kiểm tra kết nối đến camera ${camera.name}...`);
+            }
+            
+            // Function to take snapshot
+            function takeSnapshot(cameraId, isThumbnailRefresh = false) {
+                const camera = cameras[cameraId];
+                const imageElement = document.getElementById(`camera-image-${cameraId}`);
+                const placeholderElement = document.getElementById(`placeholder-${cameraId}`);
+                
+                if (!isThumbnailRefresh) {
+                    showToast(`Đang chụp ảnh từ camera ${camera.name}...`);
+                }
+                
+                // Take snapshot via API
+                fetch('/api/snapshot', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        type: camera.type,
+                        host: camera.host,
+                        port: camera.port,
+                        user: camera.user,
+                        pass: camera.pass,
+                        channel: camera.channel
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Update image with random query to avoid caching
+                        const timestamp = new Date().getTime();
+                        imageElement.src = data.imagePath + '?t=' + timestamp;
+                        
+                        // Show image, hide placeholder
+                        imageElement.classList.remove('d-none');
+                        placeholderElement.classList.add('d-none');
+                        
+                        if (!isThumbnailRefresh) {
+                            showToast(`Đã chụp ảnh thành công từ camera ${camera.name}`);
+                        }
+                    } else {
+                        // Show placeholder, hide image
+                        imageElement.classList.add('d-none');
+                        placeholderElement.classList.remove('d-none');
+                        
+                        if (!isThumbnailRefresh) {
+                            showToast(`Lỗi khi chụp ảnh: ${data.message}`, 'danger');
+                        }
+                    }
+                })
+                .catch(error => {
+                    // Show placeholder, hide image
+                    imageElement.classList.add('d-none');
+                    placeholderElement.classList.remove('d-none');
+                    
+                    if (!isThumbnailRefresh) {
+                        showToast(`Lỗi khi chụp ảnh: ${error.message}`, 'danger');
+                    }
+                });
+            }
+            
+            // Function to open stream in modal
+            function openStream(cameraId) {
+                const camera = cameras[cameraId];
+                
+                // Update modal title
+                document.getElementById('streamModalLabel').textContent = `Xem Camera: ${camera.name}`;
+                
+                // Reset modal state
+                streamLoading.classList.remove('d-none');
+                streamError.classList.add('d-none');
+                streamContainer.classList.add('d-none');
+                
+                // Show modal
+                streamModal.show();
+                
+                // Start stream
+                fetch('/api/start-stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        type: camera.type,
+                        host: camera.host,
+                        port: camera.port,
+                        user: camera.user,
+                        pass: camera.pass,
+                        channel: camera.channel
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Hide loading
+                        streamLoading.classList.add('d-none');
+                        
+                        // Store stream ID for stopping later
+                        currentStreamId = data.streamId;
+                        
+                        // Update streaming indicator
+                        document.getElementById(`streaming-${cameraId}`).classList.add('active');
+                        
+                        // Set canvas size
+                        videoCanvas.width = 640;
+                        videoCanvas.height = 480;
+                        
+                        // Connect to WebSocket stream
+                        const wsUrl = `ws://${window.location.hostname}:${data.wsPort}`;
+                        console.log(`Connecting to WebSocket stream at ${wsUrl}`);
+                        
+                        try {
+                            // Create new player
+                            jsmpegPlayer = new JSMpeg.Player(wsUrl, {
+                                canvas: videoCanvas,
+                                autoplay: true
+                            });
+                            
+                            // Store in active streams
+                            activeStreams[currentStreamId] = {
+                                player: jsmpegPlayer,
+                                cameraId: cameraId
+                            };
+                            
+                            // Show video container
+                            streamContainer.classList.remove('d-none');
+                        } catch (error) {
+                            console.error('Error initializing player:', error);
+                            streamError.textContent = 'Lỗi khi khởi tạo player: ' + error.message;
+                            streamError.classList.remove('d-none');
+                            streamLoading.classList.add('d-none');
+                        }
+                    } else {
+                        streamError.textContent = 'Lỗi khi bắt đầu stream: ' + data.message;
+                        streamError.classList.remove('d-none');
+                        streamLoading.classList.add('d-none');
+                    }
+                })
+                .catch(error => {
+                    streamError.textContent = 'Lỗi khi kết nối: ' + error.message;
+                    streamError.classList.remove('d-none');
+                    streamLoading.classList.add('d-none');
+                });
+            }
+            
+            // Function to open VLC viewer
+            function openVlcViewer(cameraId) {
+                const camera = cameras[cameraId];
+                const vlcUrl = `/vlc?id=${cameraId}&host=${camera.host}&type=${camera.type}`;
+                window.open(vlcUrl, '_blank');
+            }
+            
+            // Function to edit camera
+            function editCamera(cameraId) {
+                const camera = cameras[cameraId];
+                
+                // Populate form fields
+                document.getElementById('cameraName').value = camera.name;
+                document.getElementById('cameraType').value = camera.type;
+                document.getElementById('cameraHost').value = camera.host;
+                document.getElementById('cameraPort').value = camera.port;
+                document.getElementById('cameraUser').value = camera.user;
+                document.getElementById('cameraPass').value = camera.pass;
+                document.getElementById('cameraChannel').value = camera.channel;
+                
+                // Store camera ID for save operation
+                saveNewCameraBtn.setAttribute('data-edit-id', cameraId);
+                
+                // Update modal title
+                document.getElementById('addCameraModalLabel').textContent = 'Chỉnh Sửa Camera';
+                
+                // Show modal
+                addCameraModal.show();
+            }
+            
+            // Function to delete camera
+            function deleteCamera(cameraId) {
+                const camera = cameras[cameraId];
+                
+                if (confirm(`Bạn có chắc chắn muốn xóa camera "${camera.name}"?`)) {
+                    // Remove from array
+                    cameras.splice(cameraId, 1);
+                    
+                    // Save to localStorage
+                    localStorage.setItem('cameras', JSON.stringify(cameras));
+                    
+                    // Re-render
+                    renderCameras();
+                    
+                    // Notify user
+                    showToast(`Đã xóa camera ${camera.name}`);
+                }
+            }
+            
+            // Save new camera
+            saveNewCameraBtn.addEventListener('click', function() {
+                // Get form data
+                const name = document.getElementById('cameraName').value;
+                const type = document.getElementById('cameraType').value;
+                const host = document.getElementById('cameraHost').value;
+                const port = document.getElementById('cameraPort').value;
+                const user = document.getElementById('cameraUser').value;
+                const pass = document.getElementById('cameraPass').value;
+                const channel = document.getElementById('cameraChannel').value;
+                
+                // Validate
+                if (!name || !type || !host || !port || !user || !pass) {
+                    alert('Vui lòng điền đầy đủ thông tin camera');
                     return;
                 }
                 
-                testConnectionBtn.textContent = 'Testing...';
-                testConnectionBtn.disabled = true;
+                // Check if editing or adding
+                const editId = saveNewCameraBtn.getAttribute('data-edit-id');
                 
-                try {
-                    const response = await fetch('/api/check-camera', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ type, host, port, user, pass })
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        alert('Connection successful! Camera is accessible.');
-                    } else {
-                        alert(`Connection failed: ${data.message}`);
-                    }
-                } catch (error) {
-                    alert('Error testing connection: ' + error.message);
-                } finally {
-                    testConnectionBtn.textContent = 'Test Connection';
-                    testConnectionBtn.disabled = false;
-                }
-            });
-            
-            // Add camera form submission
-            cameraForm.addEventListener('submit', async function(e) {
-                e.preventDefault();
-                
-                const name = document.getElementById('name').value;
-                const type = document.getElementById('type').value;
-                const host = document.getElementById('host').value;
-                const port = document.getElementById('port').value;
-                const user = document.getElementById('user').value;
-                const pass = document.getElementById('pass').value;
-                const channel = document.getElementById('channel').value;
-                
-                try {
-                    // First check if the camera is accessible
-                    const checkResponse = await fetch('/api/check-camera', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ type, host, port, user, pass })
-                    });
-                    
-                    const checkData = await checkResponse.json();
-                    
-                    if (checkData.success) {
-                        // Save camera to localStorage
-                        const camera = {
-                            id: Date.now().toString(), // Use timestamp as unique ID
-                            name,
-                            type,
-                            host,
-                            port,
-                            user,
-                            pass,
-                            channel,
-                            status: 'online',
-                            lastChecked: new Date().toISOString()
-                        };
-                        
-                        // Add to cameras array
-                        cameras.push(camera);
-                        
-                        // Save to localStorage
-                        localStorage.setItem('cameras', JSON.stringify(cameras));
-                        
-                        // Close modal and refresh camera list
-                        addCameraModal.style.display = 'none';
-                        cameraForm.reset();
-                        
-                        // Add camera to the UI
-                        renderCameras();
-                        updateStatistics();
-                        
-                        // Take initial snapshot
-                        getSnapshotForCamera(camera);
-                    } else {
-                        alert(`Could not add camera: ${checkData.message}`);
-                    }
-                } catch (error) {
-                    alert('Error adding camera: ' + error.message);
-                }
-            });
-            
-            // Refresh dashboard
-            refreshDashboardBtn.addEventListener('click', function() {
-                loadAndRefreshCameras();
-            });
-            
-            // Load cameras from localStorage
-            function loadCameras() {
-                const savedCameras = localStorage.getItem('cameras');
-                if (savedCameras) {
-                    cameras = JSON.parse(savedCameras);
-                }
-            }
-            
-            // Render cameras in the UI
-            function renderCameras() {
-                // Keep the add camera card, remove all other cards
-                const cameraCards = Array.from(camerasContainer.children).filter(
-                    child => !child.classList.contains('add-camera')
-                );
-                
-                cameraCards.forEach(card => card.remove());
-                
-                if (cameras.length === 0) {
-                    // Show empty state
-                    const emptyState = document.createElement('div');
-                    emptyState.className = 'empty-state';
-                    emptyState.innerHTML = `
-                        <img src="https://cdn.jsdelivr.net/gh/tabler/tabler-icons@master/icons/device-cctv-off.svg" alt="No cameras">
-                        <h3>No Cameras Added</h3>
-                        <p>Add your first camera to start monitoring</p>
-                    `;
-                    camerasContainer.insertBefore(emptyState, addCameraBtn);
+                if (editId) {
+                    // Update existing camera
+                    cameras[editId] = { name, type, host, port, user, pass, channel };
+                    showToast(`Đã cập nhật camera ${name}`);
                 } else {
-                    // Add camera cards
-                    cameras.forEach(camera => {
-                        const card = createCameraCard(camera);
-                        camerasContainer.insertBefore(card, addCameraBtn);
-                    });
+                    // Add new camera
+                    cameras.push({ name, type, host, port, user, pass, channel });
+                    showToast(`Đã thêm camera ${name}`);
                 }
-            }
-            
-            // Create a camera card
-            function createCameraCard(camera) {
-                const card = document.createElement('div');
-                card.className = 'card';
-                card.dataset.id = camera.id;
-                
-                const statusClass = camera.status === 'online' ? 'status-online' : 'status-offline';
-                
-                card.innerHTML = `
-                    <div class="card-header">
-                        <h3 class="card-title">
-                            <span class="status-indicator ${statusClass}"></span>
-                            ${camera.name}
-                        </h3>
-                        <button class="button button-danger camera-delete" data-id="${camera.id}">
-                            <span class="material-icons">delete</span>
-                        </button>
-                    </div>
-                    <div class="snapshot-container" id="snapshot-${camera.id}">
-                        <span class="material-icons">photo_camera</span>
-                    </div>
-                    <div class="card-content">
-                        <p><strong>Type:</strong> ${camera.type}</p>
-                        <p><strong>Host:</strong> ${camera.host}</p>
-                        <p><strong>Status:</strong> ${camera.status}</p>
-                        <p><strong>Last Check:</strong> ${formatDate(camera.lastChecked)}</p>
-                    </div>
-                    <div class="card-actions">
-                        <button class="button button-secondary camera-snapshot" data-id="${camera.id}">
-                            <span class="material-icons">photo_camera</span> Snapshot
-                        </button>
-                        <button class="button ${isStreamActive(camera.id) ? 'button-danger' : ''} camera-stream" data-id="${camera.id}">
-                            <span class="material-icons">${isStreamActive(camera.id) ? 'stop' : 'play_arrow'}</span> 
-                            ${isStreamActive(camera.id) ? 'Stop Stream' : 'Live View'}
-                        </button>
-                    </div>
-                `;
-                
-                // Add event listeners
-                setTimeout(() => {
-                    const deleteBtn = card.querySelector('.camera-delete');
-                    const snapshotBtn = card.querySelector('.camera-snapshot');
-                    const streamBtn = card.querySelector('.camera-stream');
-                    
-                    deleteBtn.addEventListener('click', function() {
-                        deleteCamera(camera.id);
-                    });
-                    
-                    snapshotBtn.addEventListener('click', function() {
-                        getSnapshotForCamera(camera);
-                    });
-                    
-                    streamBtn.addEventListener('click', function() {
-                        if (isStreamActive(camera.id)) {
-                            stopStream(camera);
-                        } else {
-                            startStream(camera);
-                        }
-                    });
-                }, 0);
-                
-                return card;
-            }
-            
-            // Check camera status
-            async function checkCameraStatus(camera) {
-                try {
-                    const response = await fetch('/api/check-camera', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            type: camera.type,
-                            host: camera.host,
-                            port: camera.port,
-                            user: camera.user,
-                            pass: camera.pass
-                        })
-                    });
-                    
-                    const data = await response.json();
-                    
-                    // Update camera status
-                    camera.status = data.success ? 'online' : 'offline';
-                    camera.lastChecked = new Date().toISOString();
-                    
-                    // Save to localStorage
-                    localStorage.setItem('cameras', JSON.stringify(cameras));
-                    
-                    // Update UI
-                    const card = document.querySelector(`.card[data-id="${camera.id}"]`);
-                    if (card) {
-                        const statusIndicator = card.querySelector('.status-indicator');
-                        statusIndicator.className = `status-indicator ${camera.status === 'online' ? 'status-online' : 'status-offline'}`;
-                        
-                        // Update status text
-                        const statusText = card.querySelector('.card-content p:nth-child(3)');
-                        statusText.innerHTML = `<strong>Status:</strong> ${camera.status}`;
-                        
-                        // Update last checked
-                        const lastCheckedText = card.querySelector('.card-content p:nth-child(4)');
-                        lastCheckedText.innerHTML = `<strong>Last Check:</strong> ${formatDate(camera.lastChecked)}`;
-                    }
-                    
-                    // Take snapshot if camera is online
-                    if (camera.status === 'online') {
-                        getSnapshotForCamera(camera);
-                    }
-                    
-                    return data.success;
-                } catch (error) {
-                    console.error('Error checking camera status:', error);
-                    
-                    // Update camera status to offline
-                    camera.status = 'offline';
-                    camera.lastChecked = new Date().toISOString();
-                    
-                    // Save to localStorage
-                    localStorage.setItem('cameras', JSON.stringify(cameras));
-                    
-                    // Update UI
-                    const card = document.querySelector(`.card[data-id="${camera.id}"]`);
-                    if (card) {
-                        const statusIndicator = card.querySelector('.status-indicator');
-                        statusIndicator.className = 'status-indicator status-offline';
-                        
-                        // Update status text
-                        const statusText = card.querySelector('.card-content p:nth-child(3)');
-                        statusText.innerHTML = '<strong>Status:</strong> offline';
-                        
-                        // Update last checked
-                        const lastCheckedText = card.querySelector('.card-content p:nth-child(4)');
-                        lastCheckedText.innerHTML = `<strong>Last Check:</strong> ${formatDate(camera.lastChecked)}`;
-                    }
-                    
-                    return false;
-                }
-            }
-            
-            // Get snapshot for a camera
-            async function getSnapshotForCamera(camera) {
-                const snapshotContainer = document.getElementById(`snapshot-${camera.id}`);
-                if (!snapshotContainer) return;
-                
-                snapshotContainer.innerHTML = '<div style="text-align: center;">Loading snapshot...</div>';
-                
-                try {
-                    const response = await fetch('/api/snapshot', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            type: camera.type,
-                            host: camera.host,
-                            port: camera.port,
-                            user: camera.user,
-                            pass: camera.pass,
-                            channel: camera.channel
-                        })
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        // Display the snapshot
-                        snapshotContainer.innerHTML = `
-                            <img src="${data.imagePath}?t=${new Date().getTime()}" alt="${camera.name}" 
-                                title="Last updated: ${new Date().toLocaleTimeString()}">
-                        `;
-                    } else {
-                        snapshotContainer.innerHTML = `
-                            <div style="text-align: center; color: #f44336;">
-                                <span class="material-icons">error</span>
-                                <p>Failed to load snapshot</p>
-                            </div>
-                        `;
-                    }
-                } catch (error) {
-                    snapshotContainer.innerHTML = `
-                        <div style="text-align: center; color: #f44336;">
-                            <span class="material-icons">error</span>
-                            <p>Error: ${error.message}</p>
-                        </div>
-                    `;
-                }
-            }
-            
-            // Start stream for a camera
-            async function startStream(camera) {
-                try {
-                    const response = await fetch('/api/start-stream', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            type: camera.type,
-                            host: camera.host,
-                            port: camera.port,
-                            user: camera.user,
-                            pass: camera.pass,
-                            channel: camera.channel
-                        })
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        // Store stream info
-                        streams[camera.id] = data.streamId;
-                        
-                        // Open a new window/tab with the stream view
-                        const streamUrl = `/view.html?id=${data.streamId}&wsPort=${data.wsPort}&name=${encodeURIComponent(camera.name)}`;
-                        window.open(streamUrl, '_blank');
-                        
-                        // Update UI
-                        updateStreamButton(camera.id, true);
-                        updateStatistics();
-                    } else {
-                        alert(`Failed to start stream: ${data.message}`);
-                    }
-                } catch (error) {
-                    alert('Error starting stream: ' + error.message);
-                }
-            }
-            
-            // Stop stream for a camera
-            async function stopStream(camera) {
-                if (!streams[camera.id]) return;
-                
-                try {
-                    const response = await fetch('/api/stop-stream', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            streamId: streams[camera.id]
-                        })
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        // Remove stream info
-                        delete streams[camera.id];
-                        
-                        // Update UI
-                        updateStreamButton(camera.id, false);
-                        updateStatistics();
-                    } else {
-                        alert(`Failed to stop stream: ${data.message}`);
-                    }
-                } catch (error) {
-                    alert('Error stopping stream: ' + error.message);
-                }
-            }
-            
-            // Delete camera
-            function deleteCamera(cameraId) {
-                if (!confirm('Are you sure you want to delete this camera?')) return;
-                
-                // Stop any active stream
-                const camera = cameras.find(c => c.id === cameraId);
-                if (camera && isStreamActive(cameraId)) {
-                    stopStream(camera);
-                }
-                
-                // Remove camera from array
-                cameras = cameras.filter(c => c.id !== cameraId);
                 
                 // Save to localStorage
                 localStorage.setItem('cameras', JSON.stringify(cameras));
                 
-                // Update UI
+                // Reset form
+                document.getElementById('newCameraForm').reset();
+                saveNewCameraBtn.removeAttribute('data-edit-id');
+                document.getElementById('addCameraModalLabel').textContent = 'Thêm Camera Mới';
+                
+                // Hide modal
+                addCameraModal.hide();
+                
+                // Re-render
                 renderCameras();
-                updateStatistics();
-            }
+            });
             
-            // Load active streams
-            async function loadActiveStreams() {
-                try {
-                    const response = await fetch('/api/active-streams');
-                    const data = await response.json();
+            // Stop stream button
+            stopStreamBtn.addEventListener('click', function() {
+                if (currentStreamId) {
+                    // Stop stream
+                    fetch('/api/stop-stream', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ streamId: currentStreamId })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Cleanup
+                            cleanupStream();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error stopping stream:', error);
+                    });
+                }
+                
+                // Hide modal
+                streamModal.hide();
+            });
+            
+            // Clean up when modal is closed
+            document.getElementById('streamModal').addEventListener('hidden.bs.modal', function() {
+                if (currentStreamId) {
+                    // Stop stream
+                    fetch('/api/stop-stream', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ streamId: currentStreamId })
+                    })
+                    .then(response => response.json())
+                    .then(() => {
+                        // Cleanup
+                        cleanupStream();
+                    })
+                    .catch(error => {
+                        console.error('Error stopping stream:', error);
+                    });
+                }
+            });
+            
+            // Function to clean up stream
+            function cleanupStream() {
+                if (currentStreamId && activeStreams[currentStreamId]) {
+                    // Get camera ID
+                    const cameraId = activeStreams[currentStreamId].cameraId;
                     
-                    if (data.success) {
-                        // Clear current streams
-                        streams = {};
-                        
-                        // Process returned streams
-                        Object.entries(data.streams).forEach(([streamId, streamData]) => {
-                            // Find camera by host and type
-                            const camera = cameras.find(c => 
-                                c.host === streamData.info.host && 
-                                c.type === streamData.info.type &&
-                                c.channel === streamData.info.channel
-                            );
-                            
-                            if (camera) {
-                                streams[camera.id] = streamId;
-                                updateStreamButton(camera.id, true);
-                            }
-                        });
-                        
-                        updateStatistics();
+                    // Update streaming indicator
+                    if (cameraId !== null) {
+                        const indicator = document.getElementById(`streaming-${cameraId}`);
+                        if (indicator) {
+                            indicator.classList.remove('active');
+                        }
                     }
-                } catch (error) {
-                    console.error('Error loading active streams:', error);
+                    
+                    // Cleanup player
+                    if (jsmpegPlayer) {
+                        jsmpegPlayer.destroy();
+                        jsmpegPlayer = null;
+                    }
+                    
+                    // Remove from active streams
+                    delete activeStreams[currentStreamId];
+                    currentStreamId = null;
                 }
             }
             
-            // Load and refresh cameras
-            async function loadAndRefreshCameras() {
-                loadCameras();
-                renderCameras();
-                
-                // Check status for each camera
-                const statusPromises = cameras.map(camera => checkCameraStatus(camera));
-                await Promise.all(statusPromises);
-                
-                // Load active streams
-                await loadActiveStreams();
-                
-                // Update statistics
-                updateStatistics();
-            }
-            
-            // Update statistics
-            function updateStatistics() {
-                const total = cameras.length;
-                const online = cameras.filter(c => c.status === 'online').length;
-                const offline = total - online;
-                const active = Object.keys(streams).length;
-                
-                totalCamerasEl.textContent = total;
-                onlineCamerasEl.textContent = online;
-                offlineCamerasEl.textContent = offline;
-                activeStreamsEl.textContent = active;
-            }
-            
-            // Check if a stream is active for a camera
-            function isStreamActive(cameraId) {
-                return !!streams[cameraId];
-            }
-            
-            // Update stream button
-            function updateStreamButton(cameraId, isActive) {
-                const button = document.querySelector(`.camera-stream[data-id="${cameraId}"]`);
-                if (!button) return;
-                
-                if (isActive) {
-                    button.innerHTML = '<span class="material-icons">stop</span> Stop Stream';
-                    button.classList.add('button-danger');
-                } else {
-                    button.innerHTML = '<span class="material-icons">play_arrow</span> Live View';
-                    button.classList.remove('button-danger');
-                }
-            }
-            
-            // Format date
-            function formatDate(dateString) {
-                const date = new Date(dateString);
-                return date.toLocaleString();
-            }
-            
-            // Initialize
-            loadAndRefreshCameras();
-            
-            // Socket.IO events for real-time updates
+            // Socket.IO events
             socket.on('connect', () => {
                 console.log('Connected to server');
             });
             
-            socket.on('stream-started', (data) => {
-                // Find camera by stream ID
-                const cameraId = Object.keys(streams).find(key => streams[key] === data.streamId);
-                if (cameraId) {
-                    updateStreamButton(cameraId, true);
-                    updateStatistics();
+            socket.on('camera-status', data => {
+                const statusIndicator = document.getElementById(`status-${data.cameraId}`);
+                
+                if (!statusIndicator) return;
+                
+                // Update indicator based on status
+                if (data.status === 'online') {
+                    statusIndicator.className = 'status-indicator status-online';
+                    showToast(`Camera ${cameras[data.cameraId].name} trực tuyến!`);
+                    
+                    // Take a snapshot to update the thumbnail
+                    takeSnapshot(data.cameraId, true);
+                } else if (data.status === 'offline') {
+                    statusIndicator.className = 'status-indicator status-offline';
+                    showToast(`Camera ${cameras[data.cameraId].name} ngoại tuyến: ${data.message}`, 'danger');
+                } else {
+                    statusIndicator.className = 'status-indicator status-unknown';
+                    showToast(`Lỗi khi kiểm tra camera ${cameras[data.cameraId].name}: ${data.message}`, 'danger');
                 }
             });
             
-            socket.on('stream-stopped', (data) => {
-                // Find camera by stream ID
-                const cameraId = Object.keys(streams).find(key => streams[key] === data.streamId);
-                if (cameraId) {
-                    delete streams[cameraId];
-                    updateStreamButton(cameraId, false);
-                    updateStatistics();
-                }
+            socket.on('stream-started', data => {
+                console.log('Stream started:', data);
             });
             
-            // Refresh camera status every 5 minutes
-            setInterval(() => {
-                console.log('Auto-refreshing camera status...');
-                loadAndRefreshCameras();
-            }, 5 * 60 * 1000);
+            socket.on('stream-stopped', data => {
+                console.log('Stream stopped:', data);
+            });
+            
+            // Toast notification
+            function showToast(message, type = 'success') {
+                // Create toast container if it doesn't exist
+                let toastContainer = document.getElementById('toast-container');
+                if (!toastContainer) {
+                    toastContainer = document.createElement('div');
+                    toastContainer.id = 'toast-container';
+                    toastContainer.className = 'position-fixed bottom-0 end-0 p-3';
+                    toastContainer.style.zIndex = '9999';
+                    document.body.appendChild(toastContainer);
+                }
+                
+                // Create toast
+                const toastId = 'toast-' + Date.now();
+                const toast = document.createElement('div');
+                toast.id = toastId;
+                toast.className = `toast align-items-center text-white bg-${type} border-0`;
+                toast.setAttribute('role', 'alert');
+                toast.setAttribute('aria-live', 'assertive');
+                toast.setAttribute('aria-atomic', 'true');
+                
+                toast.innerHTML = `
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            ${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                `;
+                
+                toastContainer.appendChild(toast);
+                
+                // Show toast
+                const bsToast = new bootstrap.Toast(toast, { delay: 3000 });
+                bsToast.show();
+                
+                // Remove after hidden
+                toast.addEventListener('hidden.bs.toast', function() {
+                    toast.remove();
+                });
+            }
+            
+            // Auto-refresh camera status periodically
+            function startAutoRefresh() {
+                // Check every camera status every 5 minutes
+                setInterval(() => {
+                    cameras.forEach((camera, index) => {
+                        // Only check if not streaming
+                        if (!document.getElementById(`streaming-${index}`).classList.contains('active')) {
+                            checkCameraStatus(index);
+                        }
+                    });
+                    console.log('Auto-refreshing camera status...');
+                }, 300000); // 5 minutes
+                
+                // Refresh thumbnails more frequently
+                setInterval(() => {
+                    cameras.forEach((camera, index) => {
+                        // Only refresh if not streaming
+                        if (!document.getElementById(`streaming-${index}`).classList.contains('active')) {
+                            takeSnapshot(index, true);
+                        }
+                    });
+                    console.log('Auto-refreshing camera snapshots...');
+                }, 60000); // 1 minute
+            }
+            
+            // Initial render
+            renderCameras();
+            
+            // Start auto-refresh
+            startAutoRefresh();
+            
+            // Load initial status for all cameras
+            setTimeout(() => {
+                cameras.forEach((camera, index) => {
+                    checkCameraStatus(index);
+                });
+            }, 1000);
         });
     </script>
 </body>

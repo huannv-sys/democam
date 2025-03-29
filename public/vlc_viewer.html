@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xem Camera Qua VLC</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 20px;
+            background-color: #f8f9fa;
+        }
+        .camera-container {
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .video-container {
+            width: 100%;
+            height: 0;
+            padding-bottom: 56.25%; /* 16:9 aspect ratio */
+            position: relative;
+            background-color: #000;
+        }
+        .video-container video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .camera-controls {
+            padding: 15px;
+            background-color: #343a40;
+            color: white;
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+        .status-online {
+            background-color: #28a745;
+        }
+        .status-offline {
+            background-color: #dc3545;
+        }
+        .camera-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            background-color: #495057;
+            color: white;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+        }
+        .form-container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .nav-tabs {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4 text-center">Xem Camera Qua VLC</h1>
+        
+        <ul class="nav nav-tabs" id="cameraTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="vlc-tab" data-bs-toggle="tab" data-bs-target="#vlc-content" type="button" role="tab" aria-controls="vlc-content" aria-selected="true">Xem Qua VLC</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="direct-tab" data-bs-toggle="tab" data-bs-target="#direct-content" type="button" role="tab" aria-controls="direct-content" aria-selected="false">Kết Nối Trực Tiếp</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="home-tab" data-bs-toggle="tab" data-bs-target="#home-content" type="button" role="tab" aria-controls="home-content" aria-selected="false">Quay Lại Dashboard</button>
+            </li>
+        </ul>
+        
+        <div class="tab-content" id="cameraTabsContent">
+            <div class="tab-pane fade show active" id="vlc-content" role="tabpanel" aria-labelledby="vlc-tab">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-container">
+                            <h3>Kết Nối Camera</h3>
+                            <form id="vlcForm">
+                                <div class="mb-3">
+                                    <label for="cameraType" class="form-label">Loại Camera</label>
+                                    <select class="form-select" id="cameraType" required>
+                                        <option value="dahua">Dahua</option>
+                                        <option value="hikvision">Hikvision</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="cameraHost" class="form-label">Địa Chỉ IP / Hostname</label>
+                                    <input type="text" class="form-control" id="cameraHost" placeholder="ví dụ: 192.168.1.100 hoặc camera.example.com" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="cameraUsername" class="form-label">Tên Người Dùng</label>
+                                    <input type="text" class="form-control" id="cameraUsername" value="admin" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="cameraPassword" class="form-label">Mật Khẩu</label>
+                                    <input type="password" class="form-control" id="cameraPassword" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="cameraRtspPort" class="form-label">Cổng RTSP</label>
+                                    <input type="number" class="form-control" id="cameraRtspPort" value="554" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="cameraChannel" class="form-label">Kênh</label>
+                                    <input type="number" class="form-control" id="cameraChannel" value="1" required>
+                                </div>
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="useAlternativePort">
+                                    <label class="form-check-label" for="useAlternativePort">Sử dụng cổng 37777 (Dahua)</label>
+                                </div>
+                                <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-primary">Kết Nối</button>
+                                    <button type="button" id="stopStream" class="btn btn-danger">Dừng Stream</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-8">
+                        <div class="camera-container">
+                            <div class="camera-header">
+                                <div>
+                                    <span class="status-indicator status-offline" id="streamStatus"></span>
+                                    <span id="streamStatusText">Chưa kết nối</span>
+                                </div>
+                                <div id="streamInfo"></div>
+                            </div>
+                            <div class="video-container">
+                                <video id="vlcPlayer" controls autoplay></video>
+                            </div>
+                            <div class="camera-controls">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="d-grid gap-2">
+                                            <button type="button" id="refreshStream" class="btn btn-success btn-sm">Làm Mới Stream</button>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="d-grid gap-2">
+                                            <button type="button" id="takeSnapshot" class="btn btn-info btn-sm">Chụp Ảnh</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-info" id="streamLog">
+                            <h5>Thông Tin Kết Nối</h5>
+                            <div id="logMessages">Chưa có thông tin kết nối</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="tab-pane fade" id="direct-content" role="tabpanel" aria-labelledby="direct-tab">
+                <div class="alert alert-warning">
+                    <h4>Kết Nối Trực Tiếp</h4>
+                    <p>Phần này sẽ thử kết nối trực tiếp đến camera qua cổng 37777 (chuyên biệt cho Dahua)</p>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-container">
+                            <h3>Kết Nối Trực Tiếp</h3>
+                            <form id="directConnectionForm">
+                                <div class="mb-3">
+                                    <label for="directHost" class="form-label">Địa Chỉ Camera</label>
+                                    <input type="text" class="form-control" id="directHost" placeholder="IP hoặc hostname" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="directUsername" class="form-label">Tên Người Dùng</label>
+                                    <input type="text" class="form-control" id="directUsername" value="admin" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="directPassword" class="form-label">Mật Khẩu</label>
+                                    <input type="password" class="form-control" id="directPassword" required>
+                                </div>
+                                <div class="d-grid">
+                                    <button type="submit" class="btn btn-primary">Kiểm Tra Kết Nối</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-8">
+                        <div class="alert alert-info">
+                            <h5>Kết Quả Kết Nối Trực Tiếp</h5>
+                            <pre id="directConnectionResults">Chưa có thông tin kết nối</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="tab-pane fade" id="home-content" role="tabpanel" aria-labelledby="home-tab">
+                <div class="text-center mt-4">
+                    <a href="/dashboard" class="btn btn-lg btn-primary">Quay Lại Dashboard</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/socket.io/client-dist/socket.io.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const socket = io();
+            const vlcForm = document.getElementById('vlcForm');
+            const vlcPlayer = document.getElementById('vlcPlayer');
+            const streamStatus = document.getElementById('streamStatus');
+            const streamStatusText = document.getElementById('streamStatusText');
+            const streamInfo = document.getElementById('streamInfo');
+            const logMessages = document.getElementById('logMessages');
+            const stopStreamBtn = document.getElementById('stopStream');
+            const refreshStreamBtn = document.getElementById('refreshStream');
+            const takeSnapshotBtn = document.getElementById('takeSnapshot');
+            const directConnectionForm = document.getElementById('directConnectionForm');
+            const directConnectionResults = document.getElementById('directConnectionResults');
+            
+            let currentStreamPort = null;
+            
+            function addLog(message) {
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString();
+                logMessages.innerHTML += `<div>[${timeStr}] ${message}</div>`;
+                logMessages.scrollTop = logMessages.scrollHeight;
+            }
+            
+            vlcForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const type = document.getElementById('cameraType').value;
+                const host = document.getElementById('cameraHost').value;
+                const username = document.getElementById('cameraUsername').value;
+                const password = document.getElementById('cameraPassword').value;
+                const rtspPort = document.getElementById('cameraRtspPort').value;
+                const channel = document.getElementById('cameraChannel').value;
+                const useAlternativePort = document.getElementById('useAlternativePort').checked;
+                
+                streamStatus.className = 'status-indicator status-offline';
+                streamStatusText.textContent = 'Đang kết nối...';
+                addLog(`Đang kết nối đến camera ${type} tại ${host}...`);
+                
+                // Gửi yêu cầu đến server
+                fetch('/api/vlc-stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        type,
+                        host,
+                        username,
+                        password,
+                        rtspPort,
+                        channel,
+                        useAlternativePort
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        addLog('Kết nối thành công!');
+                        streamStatus.className = 'status-indicator status-online';
+                        streamStatusText.textContent = 'Đang stream';
+                        streamInfo.textContent = data.rtspUrl;
+                        
+                        // Thiết lập VLC player
+                        vlcPlayer.src = data.httpUrl;
+                        vlcPlayer.load();
+                        vlcPlayer.play();
+                        
+                        currentStreamPort = data.port;
+                    } else {
+                        addLog(`Lỗi: ${data.error}`);
+                        streamStatus.className = 'status-indicator status-offline';
+                        streamStatusText.textContent = 'Lỗi kết nối';
+                    }
+                })
+                .catch(error => {
+                    addLog(`Lỗi: ${error.message}`);
+                    streamStatus.className = 'status-indicator status-offline';
+                    streamStatusText.textContent = 'Lỗi kết nối';
+                });
+            });
+            
+            stopStreamBtn.addEventListener('click', function() {
+                if (!currentStreamPort) {
+                    addLog('Không có stream nào đang chạy');
+                    return;
+                }
+                
+                fetch('/api/stop-vlc-stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        port: currentStreamPort
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        addLog('Đã dừng stream');
+                        streamStatus.className = 'status-indicator status-offline';
+                        streamStatusText.textContent = 'Đã ngắt kết nối';
+                        streamInfo.textContent = '';
+                        vlcPlayer.src = '';
+                        currentStreamPort = null;
+                    } else {
+                        addLog(`Lỗi khi dừng stream: ${data.message}`);
+                    }
+                })
+                .catch(error => {
+                    addLog(`Lỗi: ${error.message}`);
+                });
+            });
+            
+            refreshStreamBtn.addEventListener('click', function() {
+                if (vlcPlayer.src) {
+                    addLog('Đang làm mới stream...');
+                    vlcPlayer.load();
+                    vlcPlayer.play();
+                } else {
+                    addLog('Không có stream nào đang chạy');
+                }
+            });
+            
+            takeSnapshotBtn.addEventListener('click', function() {
+                if (!currentStreamPort) {
+                    addLog('Không có stream nào đang chạy');
+                    return;
+                }
+                
+                fetch('/api/vlc-snapshot', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        port: currentStreamPort
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        addLog(`Đã chụp ảnh: ${data.filename}`);
+                        // Hiển thị hình ảnh hoặc tạo link tải xuống
+                    } else {
+                        addLog(`Lỗi khi chụp ảnh: ${data.error}`);
+                    }
+                })
+                .catch(error => {
+                    addLog(`Lỗi: ${error.message}`);
+                });
+            });
+            
+            directConnectionForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const host = document.getElementById('directHost').value;
+                const username = document.getElementById('directUsername').value;
+                const password = document.getElementById('directPassword').value;
+                
+                directConnectionResults.textContent = 'Đang kết nối, vui lòng đợi...';
+                
+                fetch('/api/direct-connect', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        host,
+                        username,
+                        password
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    directConnectionResults.textContent = data.output || 'Không có kết quả';
+                })
+                .catch(error => {
+                    directConnectionResults.textContent = `Lỗi: ${error.message}`;
+                });
+            });
+            
+            // Socket events
+            socket.on('vlc-stream-status', function(data) {
+                addLog(`Stream status: ${data.running ? 'Đang chạy' : 'Đã dừng'} (cổng ${data.port})`);
+                
+                if (data.running) {
+                    streamStatus.className = 'status-indicator status-online';
+                    streamStatusText.textContent = 'Đang stream';
+                } else {
+                    streamStatus.className = 'status-indicator status-offline';
+                    streamStatusText.textContent = 'Đã ngắt kết nối';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

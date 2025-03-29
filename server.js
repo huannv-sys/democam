@@ -13,6 +13,7 @@ const ffmpegStatic = require('ffmpeg-static');
 
 // Thêm utils mới cho Dahua camera 
 const { DahuaApi } = require('./utils/DahuaApi.js');
+const vlcIntegration = require('./vlc_integration.js');
 
 const app = express();
 const server = http.createServer(app);
@@ -564,6 +565,11 @@ app.get('/view.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'view.html'));
 });
 
+// Serve VLC viewer page
+app.get('/vlc', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'vlc_viewer.html'));
+});
+
 // Socket.IO events
 io.on('connection', (socket) => {
   console.log('Client kết nối: ' + socket.id);
@@ -677,6 +683,151 @@ io.on('connection', (socket) => {
 // Cấu hình global để tăng timeout cho các requests
 require('https').globalAgent.options.timeout = 15000;
 require('http').globalAgent.options.timeout = 15000;
+
+// API routes cho VLC integration
+app.post('/api/vlc-stream', async (req, res) => {
+  try {
+    const { type, host, username, password, rtspPort, channel, useAlternativePort } = req.body;
+    
+    // Validate input
+    if (!host || !username || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu thông tin kết nối. Vui lòng cung cấp địa chỉ host, tên người dùng và mật khẩu."
+      });
+    }
+    
+    // Tạo RTSP URL dựa trên loại camera
+    let rtspUrl;
+    const channelNum = parseInt(channel) || 1;
+    const port = parseInt(rtspPort) || 554;
+    
+    if (type === "hikvision") {
+      rtspUrl = `rtsp://${username}:${password}@${host}:${port}/ISAPI/Streaming/channels/${channelNum}/`;
+    } else if (type === "dahua") {
+      if (useAlternativePort) {
+        // Thử kết nối qua cổng 37777 trước khi tạo stream
+        try {
+          const testResult = await vlcIntegration.connectDahuaPort37777(host, username, password);
+          console.log('Kết quả test cổng 37777:', testResult);
+        } catch (err) {
+          console.error('Lỗi khi thử kết nối cổng 37777:', err);
+        }
+      }
+      
+      // URL RTSP tiêu chuẩn cho Dahua
+      rtspUrl = `rtsp://${username}:${password}@${host}:${port}/cam/realmonitor?channel=${channelNum}&subtype=0`;
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Loại camera không được hỗ trợ. Hãy chọn 'hikvision' hoặc 'dahua'"
+      });
+    }
+    
+    // Khởi động VLC stream
+    const httpPort = 8081 + Math.floor(Math.random() * 100); // Random port để tránh xung đột
+    const streamInfo = await vlcIntegration.startVlcStream(rtspUrl, httpPort);
+    
+    if (streamInfo.success) {
+      // Broadcast thông tin stream qua Socket.IO
+      io.emit('vlc-stream-status', {
+        running: true,
+        port: httpPort,
+        rtspUrl: rtspUrl
+      });
+      
+      return res.json({
+        success: true,
+        message: "Đã bắt đầu stream VLC thành công",
+        rtspUrl: rtspUrl,
+        httpUrl: `http://localhost:${httpPort}/stream.ts`,
+        publicUrl: `//${req.headers.host.split(':')[0]}:${httpPort}/stream.ts`,
+        port: httpPort
+      });
+    } else {
+      return res.status(500).json({
+        success: false,
+        message: "Lỗi khi khởi động stream VLC",
+        error: streamInfo.error
+      });
+    }
+  } catch (error) {
+    console.error("Lỗi khi tạo stream VLC:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi khi tạo stream VLC",
+      error: error.message
+    });
+  }
+});
+
+app.post('/api/stop-vlc-stream', async (req, res) => {
+  try {
+    const { port } = req.body;
+    
+    if (!port) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu thông tin cổng stream"
+      });
+    }
+    
+    const result = await vlcIntegration.stopVlcStream(port);
+    
+    // Broadcast thông tin stream qua Socket.IO
+    io.emit('vlc-stream-status', {
+      running: false,
+      port: port
+    });
+    
+    return res.json(result);
+  } catch (error) {
+    console.error("Lỗi khi dừng stream VLC:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi khi dừng stream VLC",
+      error: error.message
+    });
+  }
+});
+
+app.post('/api/vlc-snapshot', async (req, res) => {
+  // Sẽ triển khai sau khi cải thiện phần VLC streaming
+  return res.status(500).json({
+    success: false,
+    message: "Tính năng đang được phát triển"
+  });
+});
+
+app.post('/api/direct-connect', async (req, res) => {
+  try {
+    const { host, username, password } = req.body;
+    
+    // Validate input
+    if (!host || !username || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu thông tin kết nối"
+      });
+    }
+    
+    // Thử kết nối qua cổng 37777
+    const result = await vlcIntegration.connectDahuaPort37777(host, username, password);
+    
+    return res.json({
+      success: result.success,
+      output: result.output,
+      error: result.error
+    });
+  } catch (error) {
+    console.error("Lỗi khi kết nối trực tiếp:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi khi kết nối trực tiếp",
+      error: error.message
+    });
+  }
+});
 
 // Start server
 server.listen(port, '0.0.0.0', () => {
