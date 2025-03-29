@@ -245,6 +245,13 @@ app.post('/api/start-stream', (req, res) => {
         info: { type, host, channel }
       };
       
+      // Emit stream started event
+      io.emit('stream-started', {
+        streamId,
+        wsPort: streamWsPort,
+        info: { type, host, channel }
+      });
+      
       return res.json({
         success: true,
         message: "Đã bắt đầu stream thành công",
@@ -287,8 +294,17 @@ app.post('/api/stop-stream', (req, res) => {
         activeStreams[streamId].stream.stop();
       }
       
+      // Lưu thông tin stream trước khi xóa
+      const streamInfo = activeStreams[streamId].info;
+      
       // Xóa khỏi danh sách active
       delete activeStreams[streamId];
+      
+      // Emit stream stopped event
+      io.emit('stream-stopped', {
+        streamId,
+        info: streamInfo
+      });
       
       return res.json({
         success: true,
@@ -334,12 +350,90 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Serve dashboard page
+app.get('/dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+});
+
+// Serve camera view page
+app.get('/view.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'view.html'));
+});
+
 // Socket.IO events
 io.on('connection', (socket) => {
   console.log('Client kết nối: ' + socket.id);
   
   socket.on('disconnect', () => {
     console.log('Client ngắt kết nối: ' + socket.id);
+  });
+  
+  // Camera status change events
+  socket.on('check-camera', async (data) => {
+    try {
+      const { cameraId, type, host, port, user, pass } = data;
+      
+      let camera;
+      if (type === "hikvision") {
+        camera = new hikvision({
+          host,
+          port: parseInt(port) || 80,
+          user,
+          pass
+        });
+      } else if (type === "dahua") {
+        camera = new dahua({
+          host,
+          port: parseInt(port) || 80,
+          user,
+          pass
+        });
+      } else {
+        socket.emit('camera-status', { 
+          cameraId,
+          status: 'error',
+          message: "Loại camera không được hỗ trợ" 
+        });
+        return;
+      }
+      
+      // Lấy thông tin thiết bị
+      const deviceInfo = await camera.device_info();
+      
+      if (deviceInfo.status.code === 200) {
+        socket.emit('camera-status', {
+          cameraId,
+          status: 'online',
+          message: "Kết nối thành công",
+          info: deviceInfo.data
+        });
+      } else {
+        socket.emit('camera-status', {
+          cameraId,
+          status: 'offline',
+          message: `Không thể kết nối đến camera: ${deviceInfo.status.desc}`,
+          error: deviceInfo.status
+        });
+      }
+    } catch (error) {
+      console.error("Lỗi khi kiểm tra camera:", error);
+      socket.emit('camera-status', {
+        cameraId: data.cameraId,
+        status: 'error',
+        message: "Lỗi khi kết nối đến camera: " + error.message
+      });
+    }
+  });
+  
+  // Streaming events
+  socket.on('stream-started', (data) => {
+    // Broadcast to all clients
+    io.emit('stream-started', data);
+  });
+  
+  socket.on('stream-stopped', (data) => {
+    // Broadcast to all clients
+    io.emit('stream-stopped', data);
   });
 });
 

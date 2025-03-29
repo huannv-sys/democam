@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Camera View</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #111;
+            color: white;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            padding: 10px 20px;
+            background-color: #222;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #333;
+        }
+        h1 {
+            margin: 0;
+            font-size: 20px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+        .button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+        }
+        .button-danger {
+            background-color: #f44336;
+        }
+        .button-secondary {
+            background-color: #2196F3;
+        }
+        .button:hover {
+            opacity: 0.9;
+        }
+        .icon {
+            margin-right: 5px;
+        }
+        .video-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #000;
+            overflow: hidden;
+        }
+        canvas {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        .status-bar {
+            padding: 8px 20px;
+            background-color: #222;
+            display: flex;
+            justify-content: space-between;
+            border-top: 1px solid #333;
+            font-size: 14px;
+        }
+        .info-container {
+            padding: 10px 20px;
+            background-color: #333;
+            font-size: 14px;
+        }
+        .info-row {
+            margin-bottom: 5px;
+            display: flex;
+        }
+        .info-label {
+            width: 120px;
+            font-weight: bold;
+            color: #aaa;
+        }
+        .info-value {
+            flex: 1;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+        .loading-spinner {
+            border: 4px solid #333;
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .fullscreen-button {
+            position: absolute;
+            bottom: 60px;
+            right: 20px;
+            background-color: rgba(0,0,0,0.5);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 5px 10px;
+            cursor: pointer;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+        }
+        .material-icons {
+            font-family: 'Material Icons';
+            font-weight: normal;
+            font-style: normal;
+            font-size: 24px;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+            vertical-align: middle;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+</head>
+<body>
+    <div class="header">
+        <h1 id="cameraName">Live Camera View</h1>
+        <div class="controls">
+            <button class="button button-secondary" id="takeSnapshot">
+                <span class="material-icons icon">photo_camera</span> Snapshot
+            </button>
+            <button class="button button-danger" id="stopStream">
+                <span class="material-icons icon">stop</span> Stop Stream
+            </button>
+        </div>
+    </div>
+    
+    <div class="info-container" id="infoContainer">
+        <div class="info-row">
+            <div class="info-label">Stream ID:</div>
+            <div class="info-value" id="streamId">Loading...</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">WebSocket Port:</div>
+            <div class="info-value" id="wsPort">Loading...</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">Status:</div>
+            <div class="info-value" id="streamStatus">Connecting...</div>
+        </div>
+    </div>
+    
+    <div class="video-container">
+        <div class="loading" id="loadingIndicator">
+            <div class="loading-spinner"></div>
+            <p>Connecting to camera stream...</p>
+        </div>
+        <canvas id="videoCanvas"></canvas>
+        <button class="fullscreen-button" id="fullscreenButton">
+            <span class="material-icons">fullscreen</span>
+        </button>
+    </div>
+    
+    <div class="status-bar">
+        <div id="connectionInfo">Initializing...</div>
+        <div id="timeInfo"></div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Parse query parameters
+            const params = new URLSearchParams(window.location.search);
+            const streamId = params.get('id');
+            const wsPort = params.get('wsPort');
+            const cameraName = params.get('name') || 'Camera Stream';
+            
+            // Elements
+            const videoCanvas = document.getElementById('videoCanvas');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const cameraNameEl = document.getElementById('cameraName');
+            const streamIdEl = document.getElementById('streamId');
+            const wsPortEl = document.getElementById('wsPort');
+            const streamStatusEl = document.getElementById('streamStatus');
+            const connectionInfoEl = document.getElementById('connectionInfo');
+            const timeInfoEl = document.getElementById('timeInfo');
+            const stopStreamBtn = document.getElementById('stopStream');
+            const takeSnapshotBtn = document.getElementById('takeSnapshot');
+            const fullscreenBtn = document.getElementById('fullscreenButton');
+            
+            // Set up info
+            cameraNameEl.textContent = cameraName;
+            streamIdEl.textContent = streamId || 'Not provided';
+            wsPortEl.textContent = wsPort || 'Not provided';
+            
+            // Hide loading when stream starts
+            let jsmpegPlayer = null;
+            
+            // Function to initialize player
+            function initializePlayer() {
+                if (!streamId || !wsPort) {
+                    streamStatusEl.textContent = 'Error: Missing stream ID or WebSocket port';
+                    loadingIndicator.innerHTML = `
+                        <div style="color: #f44336; font-size: 24px;">⚠️</div>
+                        <p>Error: Stream parameters are missing</p>
+                    `;
+                    return;
+                }
+                
+                // Construct WebSocket URL
+                const wsUrl = `ws://${window.location.hostname}:${wsPort}`;
+                connectionInfoEl.textContent = `Connected to: ${wsUrl}`;
+                
+                // Set canvas size
+                videoCanvas.width = 640;
+                videoCanvas.height = 480;
+                
+                loadJsMpeg().then(() => {
+                    try {
+                        // Create player
+                        jsmpegPlayer = new JSMpeg.Player(wsUrl, {
+                            canvas: videoCanvas,
+                            autoplay: true,
+                            audio: false,
+                            loop: false,
+                            onSourceEstablished: function() {
+                                console.log('Stream source established');
+                                loadingIndicator.style.display = 'none';
+                                streamStatusEl.textContent = 'Connected';
+                                startTimeUpdates();
+                            },
+                            onSourceCompleted: function() {
+                                console.log('Stream ended');
+                                streamStatusEl.textContent = 'Stream ended';
+                            },
+                            onStalled: function() {
+                                console.log('Stream stalled');
+                                streamStatusEl.textContent = 'Stream stalled, reconnecting...';
+                            }
+                        });
+                    } catch (error) {
+                        console.error('Error initializing player:', error);
+                        streamStatusEl.textContent = 'Error: ' + error.message;
+                        loadingIndicator.innerHTML = `
+                            <div style="color: #f44336; font-size: 24px;">⚠️</div>
+                            <p>Error initializing stream: ${error.message}</p>
+                        `;
+                    }
+                }).catch(error => {
+                    console.error('Failed to load JSMpeg:', error);
+                    streamStatusEl.textContent = 'Error: ' + error.message;
+                    loadingIndicator.innerHTML = `
+                        <div style="color: #f44336; font-size: 24px;">⚠️</div>
+                        <p>Error loading video player: ${error.message}</p>
+                    `;
+                });
+            }
+            
+            // Function to update time info
+            function startTimeUpdates() {
+                setInterval(() => {
+                    const now = new Date();
+                    timeInfoEl.textContent = now.toLocaleTimeString();
+                }, 1000);
+                
+                // Initial update
+                const now = new Date();
+                timeInfoEl.textContent = now.toLocaleTimeString();
+            }
+            
+            // Stop stream button
+            stopStreamBtn.addEventListener('click', function() {
+                if (confirm('Are you sure you want to stop the stream?')) {
+                    fetch('/api/stop-stream', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ streamId })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Clean up player
+                            if (jsmpegPlayer) {
+                                jsmpegPlayer.destroy();
+                            }
+                            
+                            // Close window
+                            window.close();
+                        } else {
+                            alert('Failed to stop stream: ' + data.message);
+                        }
+                    })
+                    .catch(error => {
+                        alert('Error stopping stream: ' + error.message);
+                    });
+                }
+            });
+            
+            // Take snapshot button
+            takeSnapshotBtn.addEventListener('click', function() {
+                if (!videoCanvas) return;
+                
+                try {
+                    // Create a snapshot from the canvas
+                    const link = document.createElement('a');
+                    link.download = `snapshot_${cameraName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${new Date().toISOString().replace(/:/g, '-')}.png`;
+                    link.href = videoCanvas.toDataURL('image/png');
+                    link.click();
+                } catch (error) {
+                    alert('Error taking snapshot: ' + error.message);
+                }
+            });
+            
+            // Fullscreen button
+            fullscreenBtn.addEventListener('click', function() {
+                if (!document.fullscreenElement) {
+                    if (document.documentElement.requestFullscreen) {
+                        document.documentElement.requestFullscreen();
+                    } else if (document.documentElement.mozRequestFullScreen) {
+                        document.documentElement.mozRequestFullScreen();
+                    } else if (document.documentElement.webkitRequestFullscreen) {
+                        document.documentElement.webkitRequestFullscreen();
+                    } else if (document.documentElement.msRequestFullscreen) {
+                        document.documentElement.msRequestFullscreen();
+                    }
+                    fullscreenBtn.querySelector('.material-icons').textContent = 'fullscreen_exit';
+                } else {
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen();
+                    } else if (document.mozCancelFullScreen) {
+                        document.mozCancelFullScreen();
+                    } else if (document.webkitExitFullscreen) {
+                        document.webkitExitFullscreen();
+                    } else if (document.msExitFullscreen) {
+                        document.msExitFullscreen();
+                    }
+                    fullscreenBtn.querySelector('.material-icons').textContent = 'fullscreen';
+                }
+            });
+            
+            // Function to dynamically load jsmpeg
+            function loadJsMpeg() {
+                return new Promise((resolve, reject) => {
+                    if (window.JSMpeg) {
+                        resolve();
+                        return;
+                    }
+                    
+                    const script = document.createElement('script');
+                    script.src = 'https://cdn.jsdelivr.net/npm/jsmpeg@1.0.0/jsmpeg.min.js';
+                    script.onload = () => resolve();
+                    script.onerror = () => reject(new Error('Failed to load jsmpeg'));
+                    document.head.appendChild(script);
+                });
+            }
+            
+            // Window close event
+            window.addEventListener('beforeunload', function() {
+                // Try to stop the stream
+                fetch('/api/stop-stream', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ streamId }),
+                    keepalive: true
+                }).catch(() => {});
+                
+                // Clean up player
+                if (jsmpegPlayer) {
+                    jsmpegPlayer.destroy();
+                }
+            });
+            
+            // Initialize
+            initializePlayer();
+        });
+    </script>
+</body>
+</html>
