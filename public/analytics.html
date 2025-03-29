@@ -373,7 +373,7 @@
                                 
                                 <div id="noAnalysisResults" class="text-center py-5">
                                     <i class="bi bi-image text-muted" style="font-size: 5rem;"></i>
-                                    <p class="mt-3">Chưa có phân tích nào. Hãy chọn một camera và nhấn "Chụp & Phân Tích"</p>
+                                    <p class="mt-3">Chưa có phân tích nào. Hãy nhấn "Chụp & Phân Tích" để xem demo phân tích AI, hoặc chọn một camera thực để phân tích</p>
                                 </div>
                             </div>
                         </div>
@@ -756,13 +756,6 @@
             analyzeSnapshotBtn.addEventListener('click', function() {
                 const cameraIndex = cameraSelect.value;
                 
-                if (!cameraIndex) {
-                    alert('Vui lòng chọn một camera để phân tích');
-                    return;
-                }
-                
-                const camera = cameras[cameraIndex];
-                
                 // Show loading
                 loadingAnalysis.style.display = 'block';
                 analysisResults.style.display = 'none';
@@ -775,6 +768,79 @@
                     detectLicensePlates: detectPlatesCheck.checked,
                     detectObjects: detectObjectsCheck.checked
                 };
+                
+                if (!cameraIndex) {
+                    console.log("Không có camera được chọn - sử dụng demo AI với dữ liệu mẫu");
+                    
+                    // Tạo dữ liệu phân tích mẫu để thử nghiệm giao diện
+                    setTimeout(() => {
+                        const demoResults = {
+                            imagePath: '/snapshots/demo_image.jpg',
+                            timestamp: Date.now(),
+                            summary: {
+                                personCount: 2,
+                                faceCount: 1,
+                                licensePlateCount: 1,
+                                objectCount: 3
+                            },
+                            detections: {
+                                persons: [
+                                    {
+                                        confidence: 95.8,
+                                        boundingBox: { x_min: 50, y_min: 100, x_max: 150, y_max: 300 }
+                                    },
+                                    {
+                                        confidence: 87.2,
+                                        boundingBox: { x_min: 250, y_min: 150, x_max: 350, y_max: 350 }
+                                    }
+                                ],
+                                faces: [
+                                    {
+                                        confidence: 89.5,
+                                        boundingBox: { x_min: 75, y_min: 110, x_max: 125, y_max: 170 },
+                                        gender: "Nam",
+                                        age: 35
+                                    }
+                                ],
+                                licensePlates: [
+                                    {
+                                        text: "29A-54321",
+                                        confidence: 92.7,
+                                        boundingBox: { x_min: 400, y_min: 250, x_max: 480, y_max: 280 }
+                                    }
+                                ],
+                                objects: [
+                                    {
+                                        label: "Xe hơi",
+                                        confidence: 96.3,
+                                        boundingBox: { x_min: 380, y_min: 220, x_max: 520, y_max: 300 }
+                                    },
+                                    {
+                                        label: "Ghế",
+                                        confidence: 85.1,
+                                        boundingBox: { x_min: 150, y_min: 300, x_max: 200, y_max: 350 }
+                                    },
+                                    {
+                                        label: "Túi xách",
+                                        confidence: 78.5,
+                                        boundingBox: { x_min: 100, y_min: 320, x_max: 130, y_max: 350 }
+                                    }
+                                ]
+                            }
+                        };
+                        
+                        // Hiển thị kết quả demo
+                        displayAnalysisResults(demoResults, "Demo Camera");
+                        updateCounts(demoResults.summary);
+                        
+                        // Ẩn loading
+                        loadingAnalysis.style.display = 'none';
+                    }, 1500);
+                    
+                    return;
+                }
+                
+                const camera = cameras[cameraIndex];
                 
                 // Request snapshot and analysis
                 fetch('/api/analyze-snapshot', {
@@ -814,7 +880,7 @@
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    alert('Lỗi khi phân tích hình ảnh');
+                    alert('Lỗi khi phân tích hình ảnh: ' + error.message);
                     loadingAnalysis.style.display = 'none';
                     noAnalysisResults.style.display = 'block';
                 });
