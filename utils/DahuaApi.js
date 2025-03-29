@@ -46,18 +46,32 @@ class DahuaApi {
    */
   async getSnapshot(channel = 1) {
     // Try multiple snapshot URLs with digest auth
+    // Thêm nhiều đường dẫn hơn và các biến thể khác nhau
     const snapshotPaths = [
       `/cgi-bin/snapshot.cgi?channel=${channel}`,
       `/snapshot.cgi?channel=${channel}`,
       `/cgi-bin/getSnapshot.cgi?channel=${channel}`,
       `/cgi-bin/image.cgi?channel=${channel}`,
       `/onvif-http/snapshot?channel=${channel}`,
-      `/ISAPI/Streaming/channels/${channel}/picture`
+      `/ISAPI/Streaming/channels/${channel}/picture`,
+      `/ISAPI/Streaming/channels/${channel}01/picture`,
+      `/webcapture.jpg?channel=${channel}`,
+      `/cgi-bin/jpeg/channel${channel}`,
+      `/cgi-bin/camera.cgi?channel=${channel}`,
+      `/cgi-bin/snapshot.cgi`, // Thử không có tham số kênh
+      `/snapshot.cgi`,         // Thử không có tham số kênh
+      `/cgi-bin/snapManager.cgi?action=attachFileProc&channel=${channel}`,
+      `/cgi-bin/mjpg/snapshot.cgi?chn=${channel}`,
+      `/cgi-bin/mjpg/video.cgi?channel=${channel}&subtype=1`,
+      `/cgi-bin/snapshot.jpg?channel=${channel}`
     ];
     
     let lastError = null;
     
-    // Try with digest auth first
+    // Tăng thời gian timeout cho snapshot
+    const snapshotTimeout = this.timeout * 2;
+    
+    // Thử với Digest Auth trước
     for (const path of snapshotPaths) {
       try {
         console.log(`Thử lấy snapshot từ: ${this.baseUrl}${path}`);
@@ -65,14 +79,24 @@ class DahuaApi {
           method: 'GET',
           url: `${this.baseUrl}${path}`,
           responseType: 'arraybuffer',
-          timeout: this.timeout
+          timeout: snapshotTimeout,
+          // Thêm header để cải thiện khả năng thành công
+          headers: {
+            'Accept': 'image/jpeg,image/*;q=0.8',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
         });
         
-        if (response.data && response.data.length > 100) {
+        // Kiểm tra kỹ lưỡng hơn dữ liệu hình ảnh
+        if (response.data && 
+            response.data.length > 100 && 
+            response.headers['content-type'] && 
+            response.headers['content-type'].includes('image')) {
           console.log(`Snapshot thành công từ ${path}`);
           return response.data;
         } else {
-          console.warn(`Snapshot nhận được từ ${path} không hợp lệ, kích thước: ${response.data ? response.data.length : 0} bytes`);
+          console.warn(`Snapshot nhận được từ ${path} không hợp lệ, kích thước: ${response.data ? response.data.length : 0} bytes, content-type: ${response.headers['content-type'] || 'không xác định'}`);
         }
       } catch (error) {
         console.error(`Lỗi khi lấy snapshot từ ${path}:`, error.message);
@@ -80,19 +104,26 @@ class DahuaApi {
       }
     }
     
-    // If digest auth failed, try with basic auth
+    // Nếu Digest Auth thất bại, thử với Basic Auth
     for (const path of snapshotPaths) {
       try {
         console.log(`Thử lại snapshot với Basic Auth: ${this.baseUrl}${path}`);
         const response = await axios.get(`${this.baseUrl}${path}`, {
           headers: {
-            'Authorization': `Basic ${this.basicAuth}`
+            'Authorization': `Basic ${this.basicAuth}`,
+            'Accept': 'image/jpeg,image/*;q=0.8',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
           },
           responseType: 'arraybuffer',
-          timeout: this.timeout
+          timeout: snapshotTimeout
         });
         
-        if (response.data && response.data.length > 100) {
+        // Kiểm tra response có đúng là hình ảnh không
+        if (response.data && 
+            response.data.length > 100 && 
+            response.headers['content-type'] && 
+            response.headers['content-type'].includes('image')) {
           console.log(`Snapshot với Basic Auth thành công từ ${path}`);
           return response.data;
         }
@@ -101,7 +132,33 @@ class DahuaApi {
       }
     }
     
-    // If we reached here, all attempts failed
+    // Thử không dùng xác thực (một số camera có thể cho phép truy cập ẩn danh)
+    for (const path of snapshotPaths) {
+      try {
+        console.log(`Thử lấy snapshot không cần xác thực: ${this.baseUrl}${path}`);
+        const response = await axios.get(`${this.baseUrl}${path}`, {
+          responseType: 'arraybuffer',
+          timeout: snapshotTimeout,
+          headers: {
+            'Accept': 'image/jpeg,image/*;q=0.8',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+        
+        if (response.data && 
+            response.data.length > 100 && 
+            response.headers['content-type'] && 
+            response.headers['content-type'].includes('image')) {
+          console.log(`Snapshot không xác thực thành công từ ${path}`);
+          return response.data;
+        }
+      } catch (error) {
+        console.error(`Lỗi khi lấy snapshot không xác thực từ ${path}:`, error.message);
+      }
+    }
+    
+    // Nếu đã thử tất cả các phương pháp mà không thành công
     throw lastError || new Error('Không thể lấy snapshot từ camera');
   }
   
@@ -147,15 +204,45 @@ class DahuaApi {
    * @returns {Array<string>} - Array of possible RTSP URLs
    */
   getRtspUrls(channel = 1, streamType = 0) {
+    // Thêm nhiều định dạng URL RTSP hơn để thử
     return [
+      // Định dạng phổ biến nhất cho Dahua
       `rtsp://${this.username}:${this.password}@${this.host}:554/cam/realmonitor?channel=${channel}&subtype=${streamType}`,
+      
+      // Định dạng thay thế với các biến thể channel khác nhau
       `rtsp://${this.username}:${this.password}@${this.host}:554/cam/realmonitor?channel=${channel+1}&subtype=${streamType}`,
+      `rtsp://${this.username}:${this.password}@${this.host}:554/cam/realmonitor?channel=${channel}&subtype=${streamType === 0 ? 1 : 0}`,
+      
+      // Các định dạng NVR/DVR khác của Dahua
       `rtsp://${this.username}:${this.password}@${this.host}:554/h264/ch${channel}/${streamType}/av_stream`,
+      `rtsp://${this.username}:${this.password}@${this.host}:554/h264/ch${channel+1}/${streamType}/av_stream`,
       `rtsp://${this.username}:${this.password}@${this.host}:554/live/ch${channel}/${streamType}`,
+      
+      // Định dạng cho camera Dahua IPC
+      `rtsp://${this.username}:${this.password}@${this.host}:554/cam/playback?channel=${channel}`,
+      
+      // Định dạng Onvif tương thích
       `rtsp://${this.username}:${this.password}@${this.host}:554/streaming/channels/${channel}${streamType === 1 ? '02' : '01'}`,
       `rtsp://${this.username}:${this.password}@${this.host}:554/onvif${channel}`,
       `rtsp://${this.username}:${this.password}@${this.host}:554/Streaming/Channels/${channel}${streamType === 1 ? '02' : '01'}`,
-      `rtsp://${this.username}:${this.password}@${this.host}:554/stream${channel}`
+      
+      // Định dạng đơn giản
+      `rtsp://${this.username}:${this.password}@${this.host}:554/stream${channel}`,
+      `rtsp://${this.username}:${this.password}@${this.host}:554/ch${channel}_${streamType}`,
+      
+      // Định dạng cho camera Dahua PTZ
+      `rtsp://${this.username}:${this.password}@${this.host}:554/ptz/ch${channel}/${streamType}`,
+      
+      // Định dạng cổ điển
+      `rtsp://${this.username}:${this.password}@${this.host}:554/video${channel}`,
+      `rtsp://${this.username}:${this.password}@${this.host}:554/media${channel}`,
+      
+      // Thử với các cổng RTSP khác
+      `rtsp://${this.username}:${this.password}@${this.host}:1554/cam/realmonitor?channel=${channel}&subtype=${streamType}`,
+      `rtsp://${this.username}:${this.password}@${this.host}:10554/cam/realmonitor?channel=${channel}&subtype=${streamType}`,
+      
+      // Thử URL không có thông tin xác thực
+      `rtsp://${this.host}:554/cam/realmonitor?channel=${channel}&subtype=${streamType}`
     ];
   }
   

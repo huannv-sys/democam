@@ -383,12 +383,18 @@ app.post('/api/start-stream', (req, res) => {
           ffmpegPath: ffmpegPath,
           ffmpegOptions: {
             '-stats': '',
-            '-r': 20,  // Giảm framerate để ổn định hơn
-            '-q:v': 5,  // Giảm chất lượng để truyền dễ hơn
+            '-r': 10,  // Giảm framerate đáng kể để ổn định kết nối
+            '-q:v': 10, // Giảm chất lượng video nhiều hơn
             '-rtsp_transport': 'tcp',  // Sử dụng TCP thay vì UDP để truyền dữ liệu ổn định hơn
             '-stimeout': '15000000',   // Timeout cho RTSP (microseconds)
-            '-analyzeduration': '5000000',  // Tăng thời gian phân tích
-            '-probesize': '5000000'    // Tăng kích thước probe
+            '-analyzeduration': '15000000',  // Tăng thời gian phân tích lên 15s
+            '-probesize': '15000000',    // Tăng kích thước probe
+            '-preset': 'ultrafast',  // Sử dụng preset nhanh nhất
+            '-tune': 'zerolatency',  // Tối ưu cho độ trễ thấp
+            '-threads': '2',         // Giới hạn số luồng CPU
+            '-reconnect': '1',       // Cho phép kết nối lại
+            '-reconnect_streamed': '1', // Cho phép kết nối lại với stream
+            '-reconnect_delay_max': '5' // Độ trễ tối đa là 5 giây
           }
         });
       } catch (error) {
@@ -412,13 +418,19 @@ app.post('/api/start-stream', (req, res) => {
                 ffmpegPath: ffmpegPath,
                 ffmpegOptions: {
                   '-stats': '',
-                  '-r': 15,                   // Giảm framerate thêm nữa
-                  '-q:v': 7,                  // Giảm chất lượng hơn nữa
+                  '-r': 5,                    // Giảm framerate xuống rất thấp
+                  '-q:v': 15,                 // Chất lượng rất thấp để đảm bảo kết nối
                   '-rtsp_transport': 'tcp',   // Sử dụng TCP 
-                  '-stimeout': '15000000',    // 15 seconds in microseconds
-                  '-analyzeduration': '5000000',
-                  '-probesize': '5000000',
-                  '-threads': '2'             // Giới hạn số luồng
+                  '-stimeout': '20000000',    // 20 seconds in microseconds
+                  '-analyzeduration': '20000000',
+                  '-probesize': '20000000',
+                  '-threads': '1',            // Chỉ sử dụng 1 luồng CPU
+                  '-preset': 'ultrafast',
+                  '-tune': 'zerolatency',
+                  '-reconnect': '1',
+                  '-reconnect_streamed': '1',
+                  '-reconnect_delay_max': '5',
+                  '-timeout': '10000000'      // Timeout lớn hơn
                 }
               });
               
