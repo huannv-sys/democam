@@ -11,6 +11,9 @@ const { exec } = require('child_process');
 const Stream = require('node-rtsp-stream');
 const ffmpegStatic = require('ffmpeg-static');
 
+// Thêm utils mới cho Dahua camera 
+const { DahuaApi } = require('./utils/DahuaApi.js');
+
 const app = express();
 const server = http.createServer(app);
 const io = new WebSocketServer(server);
@@ -138,61 +141,94 @@ app.post('/api/snapshot', async (req, res) => {
       });
     }
     
-    let camera;
     if (type === "hikvision") {
-      camera = new hikvision({
+      // Sử dụng API cũ cho Hikvision
+      const camera = new hikvision({
         host,
         port: parseInt(port) || 80,
         user,
         pass,
         timeout: 15000 // Giảm timeout để kiểm tra nhanh hơn
       });
-    } else if (type === "dahua") {
-      camera = new dahua({
-        host,
-        port: parseInt(port) || 80,
-        user,
-        pass,
-        timeout: 15000 // Giảm timeout để kiểm tra nhanh hơn
-      });
-    } else {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Loại camera không được hỗ trợ. Hãy chọn 'hikvision' hoặc 'dahua'" 
-      });
-    }
 
-    try {
-      // Thử nhiều định dạng kênh khác nhau
-      const channelId = channel || "101"; // Default channel
-      
-      console.log(`Đang thử lấy ảnh với kênh ${channelId}...`);
-      const image = await camera.picture(channelId);
-      
-      if (!image || (image instanceof Buffer && image.length === 0)) {
-        throw new Error("Received empty image data");
+      try {
+        // Thử nhiều định dạng kênh khác nhau
+        const channelId = channel || "101"; // Default channel
+        
+        console.log(`Đang thử lấy ảnh với kênh ${channelId}...`);
+        const image = await camera.picture(channelId);
+        
+        if (!image || (image instanceof Buffer && image.length === 0)) {
+          throw new Error("Received empty image data");
+        }
+        
+        // Lưu snapshot ra file với tên duy nhất
+        const timestamp = new Date().getTime();
+        const filename = `${type}_${host.replace(/\./g, '_')}_${timestamp}.jpg`;
+        const filePath = path.join('./public/snapshots', filename);
+        
+        fs.writeFileSync(filePath, image);
+        
+        return res.json({
+          success: true,
+          message: "Đã lấy snapshot thành công",
+          imagePath: `/snapshots/${filename}`
+        });
+      } catch (error) {
+        console.error("Lỗi chi tiết khi lấy snapshot:", error);
+        throw error;
       }
-      
-      // Lưu snapshot ra file với tên duy nhất
-      const timestamp = new Date().getTime();
-      const filename = `${type}_${host.replace(/\./g, '_')}_${timestamp}.jpg`;
-      const filePath = path.join('./public/snapshots', filename);
-      
-      fs.writeFileSync(filePath, image);
-      
-      return res.json({
-        success: true,
-        message: "Đã lấy snapshot thành công",
-        imagePath: `/snapshots/${filename}`
-      });
-    } catch (error) {
-      console.error("Lỗi chi tiết khi lấy snapshot:", error);
-      
-      // Nếu thử kênh đầu tiên không thành công, thử các kênh khác
-      if (channel === "101" || !channel) {
+    } else if (type === "dahua") {
+      // Sử dụng API mới DahuaApi cho Dahua cameras
+      try {
+        // Khởi tạo API mới
+        const dahuaApi = new DahuaApi({
+          host,
+          port: parseInt(port) || 80,
+          username: user,
+          password: pass,
+          timeout: 15000
+        });
+        
+        // Thử lấy snapshot với API mới và nhiều phương thức khác nhau
+        const channelNum = parseInt(channel) || 1;
+        console.log(`Thử lấy snapshot cho kênh ${channelNum}`);
+        
+        const image = await dahuaApi.getSnapshot(channelNum);
+        
+        if (!image || image.length < 100) {
+          throw new Error("Received invalid or empty image data");
+        }
+        
+        // Lưu snapshot ra file với tên duy nhất
+        const timestamp = new Date().getTime();
+        const filename = `${type}_${host.replace(/\./g, '_')}_${timestamp}.jpg`;
+        const filePath = path.join('./public/snapshots', filename);
+        
+        fs.writeFileSync(filePath, image);
+        
+        return res.json({
+          success: true,
+          message: "Đã lấy snapshot thành công với API mới",
+          imagePath: `/snapshots/${filename}`
+        });
+      } catch (apiError) {
+        console.error("Lỗi khi lấy snapshot với API mới:", apiError);
+        
+        // Nếu API mới thất bại, thử lại với API cũ
         try {
-          console.log("Thử lại với kênh 1...");
-          const image = await camera.picture("1");
+          console.log("Thử lại với API cũ...");
+          const oldCamera = new dahua({
+            host,
+            port: parseInt(port) || 80,
+            user,
+            pass,
+            timeout: 15000
+          });
+          
+          // Thử nhiều định dạng kênh khác nhau
+          const channelId = channel || "1";
+          const image = await oldCamera.picture(channelId);
           
           if (!image || (image instanceof Buffer && image.length === 0)) {
             throw new Error("Received empty image data");
@@ -207,16 +243,19 @@ app.post('/api/snapshot', async (req, res) => {
           
           return res.json({
             success: true,
-            message: "Đã lấy snapshot thành công với kênh 1",
+            message: "Đã lấy snapshot thành công với API cũ",
             imagePath: `/snapshots/${filename}`
           });
-        } catch (secondError) {
-          console.error("Cũng không lấy được ảnh với kênh 1:", secondError);
-          throw error; // Throw lỗi ban đầu
+        } catch (oldApiError) {
+          console.error("Cũng không thể lấy snapshot với API cũ:", oldApiError);
+          throw apiError; // Throw lỗi ban đầu
         }
-      } else {
-        throw error;
       }
+    } else {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Loại camera không được hỗ trợ. Hãy chọn 'hikvision' hoặc 'dahua'" 
+      });
     }
   } catch (error) {
     console.error("Lỗi khi lấy snapshot từ camera:", error);
@@ -290,28 +329,33 @@ app.post('/api/start-stream', (req, res) => {
         subtype = "0";
       }
       
-      // Thử nhiều định dạng URL RTSP phổ biến cho camera Dahua dựa trên tài liệu API
-      // Mỗi loại camera có thể có các định dạng RTSP khác nhau
+      // Các URL RTSP cho Dahua
       const rtspUrls = [
-        // Định dạng Standard Dahua
+        // Định dạng đã biết hoạt động với Dahua
         `rtsp://${user}:${pass}@${host}:554/cam/realmonitor?channel=${channelNumber}&subtype=${subtype}`,
         
-        // Định dạng thay thế
+        // Định dạng thay thế đã biết
         `rtsp://${user}:${pass}@${host}:554/h264/ch${channelNumber}/${subtype}/av_stream`,
         
-        // Định dạng thay thế khác
+        // Các định dạng mới tìm được từ DAHUA-ANPR repo
         `rtsp://${user}:${pass}@${host}:554/live/ch${channelNumber}/${subtype}`,
         `rtsp://${user}:${pass}@${host}:554/streaming/channels/${channelNumber}${subtype === "1" ? "02" : "01"}`,
         
-        // Thử một số đường dẫn ONVIF/Thông dụng
+        // Các định dạng ONVIF tiêu chuẩn
         `rtsp://${user}:${pass}@${host}:554/onvif${channelNumber}`,
-        `rtsp://${user}:${pass}@${host}:554/media/video${channelNumber}`
+        `rtsp://${user}:${pass}@${host}:554/media/video${channelNumber}`,
+        `rtsp://${user}:${pass}@${host}:554/Streaming/Channels/${channelNumber}${subtype === "1" ? "02" : "01"}`,
+        
+        // Các định dạng đơn giản
+        `rtsp://${user}:${pass}@${host}:554/stream${channelNumber}`,
+        `rtsp://${user}:${pass}@${host}:554/ch${channelNumber}_${subtype}`
       ];
       
       // Sử dụng URL đầu tiên làm mặc định
       rtspUrl = rtspUrls[0];
       console.log(`Đã tạo URL RTSP chính cho Dahua: ${rtspUrl}`);
       console.log(`URL RTSP dự phòng: ${rtspUrls[1]}`);
+      console.log(`Tổng cộng ${rtspUrls.length} URL RTSP để thử`);
     } else {
       return res.status(400).json({ 
         success: false, 

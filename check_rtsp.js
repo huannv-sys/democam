@@ -6,10 +6,10 @@ const fs = require("fs");
 // Thay đổi thông tin camera ở đây
 const cameraInfo = {
   type: "dahua", // hoặc "hikvision"
-  host: "your_ddns_or_ip_address",
+  host: "huannv112.ddns.net",
   port: 80,
   user: "admin",
-  pass: "password"
+  pass: "admin123"
 };
 
 // Các channel IDs và URIs RTSP phổ biến để thử nghiệm
@@ -37,7 +37,12 @@ const channelsToTest = {
     dahua: (host, user, pass) => [
       `rtsp://${user}:${pass}@${host}:554/cam/realmonitor?channel=1&subtype=0`,
       `rtsp://${user}:${pass}@${host}:554/cam/realmonitor?channel=1&subtype=1`,
-      `rtsp://${user}:${pass}@${host}:554/cam/realmonitor?channel=2&subtype=0`,
+      `rtsp://${user}:${pass}@${host}:554/h264/ch1/0/av_stream`,
+      `rtsp://${user}:${pass}@${host}:554/h264/ch1/1/av_stream`,
+      `rtsp://${user}:${pass}@${host}:554/live/ch1/0`,
+      `rtsp://${user}:${pass}@${host}:554/live/ch1/1`,
+      `rtsp://${user}:${pass}@${host}:554/streaming/channels/101`,
+      `rtsp://${user}:${pass}@${host}:554/streaming/channels/102`, 
       `rtsp://${user}:${pass}@${host}:554/stream1`,
       `rtsp://${user}:${pass}@${host}:554/stream2`
     ]
