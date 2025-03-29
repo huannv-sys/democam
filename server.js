@@ -45,20 +45,29 @@ app.post('/api/check-camera', async (req, res) => {
     
     console.log(`Đang kiểm tra kết nối với camera ${type} tại ${host}...`);
     
+    if (!host || !user || !pass) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu thông tin kết nối. Vui lòng cung cấp địa chỉ host, tên người dùng và mật khẩu."
+      });
+    }
+    
     let camera;
     if (type === "hikvision") {
       camera = new hikvision({
         host,
         port: parseInt(port) || 80,
         user,
-        pass
+        pass,
+        timeout: 15000 // Giảm timeout để kiểm tra nhanh hơn
       });
     } else if (type === "dahua") {
       camera = new dahua({
         host,
         port: parseInt(port) || 80,
         user,
-        pass
+        pass,
+        timeout: 15000 // Giảm timeout để kiểm tra nhanh hơn
       });
     } else {
       return res.status(400).json({ 
@@ -67,20 +76,42 @@ app.post('/api/check-camera', async (req, res) => {
       });
     }
 
-    // Lấy thông tin thiết bị
-    const deviceInfo = await camera.device_info();
-    
-    if (deviceInfo.status.code === 200) {
-      return res.json({
-        success: true,
-        message: "Kết nối thành công!",
-        info: deviceInfo.data
-      });
-    } else {
-      return res.status(400).json({
+    // Lấy thông tin thiết bị với xử lý lỗi chi tiết hơn
+    try {
+      const deviceInfo = await camera.device_info();
+      
+      if (deviceInfo.status.code === 200) {
+        return res.json({
+          success: true,
+          message: "Kết nối thành công!",
+          info: deviceInfo.data
+        });
+      } else {
+        let errorMessage = "Không thể kết nối đến camera";
+        if (deviceInfo.status.desc) {
+          if (deviceInfo.status.desc.includes("ECONNREFUSED")) {
+            errorMessage = "Máy chủ từ chối kết nối. Vui lòng kiểm tra địa chỉ và cổng kết nối.";
+          } else if (deviceInfo.status.desc.includes("ETIMEDOUT")) {
+            errorMessage = "Kết nối bị timeout. Kiểm tra lại địa chỉ và cổng của camera.";
+          } else if (deviceInfo.status.desc.includes("ENOTFOUND")) {
+            errorMessage = "Không tìm thấy địa chỉ máy chủ. Vui lòng kiểm tra lại tên miền hoặc địa chỉ IP.";
+          } else {
+            errorMessage = `${errorMessage}: ${deviceInfo.status.desc}`;
+          }
+        }
+        
+        return res.status(400).json({
+          success: false,
+          message: errorMessage,
+          error: deviceInfo.status
+        });
+      }
+    } catch (cameraError) {
+      console.error("Lỗi chi tiết khi kết nối đến camera:", cameraError);
+      return res.status(500).json({
         success: false,
-        message: `Không thể kết nối đến camera: ${deviceInfo.status.desc}`,
-        error: deviceInfo.status
+        message: "Lỗi khi kết nối đến camera: " + (cameraError.message || "Lỗi không xác định"),
+        error: cameraError.message
       });
     }
   } catch (error) {
@@ -100,20 +131,29 @@ app.post('/api/snapshot', async (req, res) => {
     
     console.log(`Đang lấy snapshot từ camera ${type} tại ${host}...`);
     
+    if (!host || !user || !pass) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu thông tin kết nối. Vui lòng cung cấp địa chỉ host, tên người dùng và mật khẩu."
+      });
+    }
+    
     let camera;
     if (type === "hikvision") {
       camera = new hikvision({
         host,
         port: parseInt(port) || 80,
         user,
-        pass
+        pass,
+        timeout: 15000 // Giảm timeout để kiểm tra nhanh hơn
       });
     } else if (type === "dahua") {
       camera = new dahua({
         host,
         port: parseInt(port) || 80,
         user,
-        pass
+        pass,
+        timeout: 15000 // Giảm timeout để kiểm tra nhanh hơn
       });
     } else {
       return res.status(400).json({ 
@@ -192,6 +232,14 @@ app.post('/api/snapshot', async (req, res) => {
 app.post('/api/start-stream', (req, res) => {
   try {
     const { type, host, port, user, pass, channel, wsPort } = req.body;
+    
+    // Kiểm tra thông tin đầu vào
+    if (!host || !user || !pass) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu thông tin kết nối. Vui lòng cung cấp địa chỉ host, tên người dùng và mật khẩu."
+      });
+    }
     
     // Tạo ID cho stream dựa trên thông tin camera
     const streamId = `${type}_${host}_${channel}`;
@@ -373,20 +421,31 @@ io.on('connection', (socket) => {
     try {
       const { cameraId, type, host, port, user, pass } = data;
       
+      if (!host || !user || !pass) {
+        socket.emit('camera-status', {
+          cameraId,
+          status: 'error',
+          message: "Thiếu thông tin kết nối. Vui lòng cung cấp địa chỉ host, tên người dùng và mật khẩu."
+        });
+        return;
+      }
+      
       let camera;
       if (type === "hikvision") {
         camera = new hikvision({
           host,
           port: parseInt(port) || 80,
           user,
-          pass
+          pass,
+          timeout: 15000 // Giảm timeout để kiểm tra nhanh hơn
         });
       } else if (type === "dahua") {
         camera = new dahua({
           host,
           port: parseInt(port) || 80,
           user,
-          pass
+          pass,
+          timeout: 15000 // Giảm timeout để kiểm tra nhanh hơn
         });
       } else {
         socket.emit('camera-status', { 
@@ -397,22 +456,44 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Lấy thông tin thiết bị
-      const deviceInfo = await camera.device_info();
+      try {
+        // Lấy thông tin thiết bị
+        const deviceInfo = await camera.device_info();
       
-      if (deviceInfo.status.code === 200) {
+        if (deviceInfo.status.code === 200) {
+          socket.emit('camera-status', {
+            cameraId,
+            status: 'online',
+            message: "Kết nối thành công",
+            info: deviceInfo.data
+          });
+        } else {
+          let errorMessage = "Không thể kết nối đến camera";
+          if (deviceInfo.status.desc) {
+            if (deviceInfo.status.desc.includes("ECONNREFUSED")) {
+              errorMessage = "Máy chủ từ chối kết nối. Vui lòng kiểm tra địa chỉ và cổng kết nối.";
+            } else if (deviceInfo.status.desc.includes("ETIMEDOUT")) {
+              errorMessage = "Kết nối bị timeout. Kiểm tra lại địa chỉ và cổng của camera.";
+            } else if (deviceInfo.status.desc.includes("ENOTFOUND")) {
+              errorMessage = "Không tìm thấy địa chỉ máy chủ. Vui lòng kiểm tra lại tên miền hoặc địa chỉ IP.";
+            } else {
+              errorMessage = `${errorMessage}: ${deviceInfo.status.desc}`;
+            }
+          }
+          
+          socket.emit('camera-status', {
+            cameraId,
+            status: 'offline',
+            message: errorMessage,
+            error: deviceInfo.status
+          });
+        }
+      } catch (deviceError) {
+        console.error("Lỗi chi tiết khi kết nối đến camera:", deviceError);
         socket.emit('camera-status', {
           cameraId,
-          status: 'online',
-          message: "Kết nối thành công",
-          info: deviceInfo.data
-        });
-      } else {
-        socket.emit('camera-status', {
-          cameraId,
-          status: 'offline',
-          message: `Không thể kết nối đến camera: ${deviceInfo.status.desc}`,
-          error: deviceInfo.status
+          status: 'error',
+          message: "Lỗi khi kết nối đến camera: " + (deviceError.message || "Lỗi không xác định")
         });
       }
     } catch (error) {
@@ -436,6 +517,10 @@ io.on('connection', (socket) => {
     io.emit('stream-stopped', data);
   });
 });
+
+// Cấu hình global để tăng timeout cho các requests
+require('https').globalAgent.options.timeout = 15000;
+require('http').globalAgent.options.timeout = 15000;
 
 // Start server
 server.listen(port, '0.0.0.0', () => {
