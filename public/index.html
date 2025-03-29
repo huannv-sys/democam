@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera CCTV Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .section {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .button-secondary {
+            background-color: #2196F3;
+        }
+        .button-secondary:hover {
+            background-color: #0b7dda;
+        }
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 3px;
+        }
+        .status.success {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .status.error {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+        .snapshot-container {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .snapshot-image {
+            max-width: 100%;
+            max-height: 500px;
+            border: 1px solid #ddd;
+            box-shadow: 0 0 5px rgba(0,0,0,0.1);
+        }
+        .hidden {
+            display: none;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h1>Camera CCTV Viewer</h1>
+    
+    <div class="container">
+        <div class="section">
+            <h2>Camera Configuration</h2>
+            <form id="cameraForm">
+                <div class="form-group">
+                    <label for="type">Camera Type:</label>
+                    <select id="type" name="type" required>
+                        <option value="hikvision">Hikvision</option>
+                        <option value="dahua">Dahua</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="host">Host/IP/DDNS:</label>
+                    <input type="text" id="host" name="host" placeholder="e.g., 192.168.1.100 or mydomain.ddns.net" required>
+                </div>
+                <div class="form-group">
+                    <label for="port">Port:</label>
+                    <input type="number" id="port" name="port" value="80" placeholder="Default: 80" required>
+                </div>
+                <div class="form-group">
+                    <label for="user">Username:</label>
+                    <input type="text" id="user" name="user" placeholder="e.g., admin" required>
+                </div>
+                <div class="form-group">
+                    <label for="pass">Password:</label>
+                    <input type="password" id="pass" name="pass" required>
+                </div>
+                <div class="form-group">
+                    <label for="channel">Channel ID (Optional):</label>
+                    <input type="text" id="channel" name="channel" value="101" placeholder="Default: 101">
+                </div>
+                
+                <button type="button" id="checkConnection">Test Connection</button>
+            </form>
+            
+            <div id="connectionStatus" class="status hidden"></div>
+            <div id="deviceInfo" class="hidden">
+                <h3>Device Information</h3>
+                <table>
+                    <tr>
+                        <th>Property</th>
+                        <th>Value</th>
+                    </tr>
+                    <tbody id="deviceInfoTable"></tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Camera Snapshot</h2>
+            <p>Take a snapshot from your camera to verify the connection.</p>
+            <button type="button" id="takeSnapshot" class="button-secondary" disabled>Take Snapshot</button>
+            
+            <div id="snapshotStatus" class="status hidden"></div>
+            <div id="snapshotContainer" class="snapshot-container hidden">
+                <img id="snapshotImage" class="snapshot-image" src="" alt="Camera Snapshot">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Elements
+            const checkConnectionBtn = document.getElementById('checkConnection');
+            const takeSnapshotBtn = document.getElementById('takeSnapshot');
+            const connectionStatus = document.getElementById('connectionStatus');
+            const deviceInfo = document.getElementById('deviceInfo');
+            const deviceInfoTable = document.getElementById('deviceInfoTable');
+            const snapshotStatus = document.getElementById('snapshotStatus');
+            const snapshotContainer = document.getElementById('snapshotContainer');
+            const snapshotImage = document.getElementById('snapshotImage');
+            
+            // Check connection
+            checkConnectionBtn.addEventListener('click', async function() {
+                // Get form data
+                const type = document.getElementById('type').value;
+                const host = document.getElementById('host').value;
+                const port = document.getElementById('port').value;
+                const user = document.getElementById('user').value;
+                const pass = document.getElementById('pass').value;
+                
+                // Update UI
+                connectionStatus.classList.remove('hidden', 'success', 'error');
+                connectionStatus.textContent = 'Checking connection...';
+                deviceInfo.classList.add('hidden');
+                takeSnapshotBtn.disabled = true;
+                
+                try {
+                    const response = await fetch('/api/check-camera', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ type, host, port, user, pass })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        connectionStatus.textContent = data.message;
+                        connectionStatus.classList.add('success');
+                        
+                        // Display device info
+                        deviceInfoTable.innerHTML = '';
+                        Object.entries(data.info).forEach(([key, value]) => {
+                            const row = document.createElement('tr');
+                            const keyCell = document.createElement('td');
+                            const valueCell = document.createElement('td');
+                            
+                            keyCell.textContent = key;
+                            valueCell.textContent = value;
+                            
+                            row.appendChild(keyCell);
+                            row.appendChild(valueCell);
+                            deviceInfoTable.appendChild(row);
+                        });
+                        
+                        deviceInfo.classList.remove('hidden');
+                        takeSnapshotBtn.disabled = false;
+                    } else {
+                        connectionStatus.textContent = data.message;
+                        connectionStatus.classList.add('error');
+                    }
+                } catch (error) {
+                    connectionStatus.textContent = 'Error: ' + error.message;
+                    connectionStatus.classList.add('error');
+                }
+            });
+            
+            // Take snapshot
+            takeSnapshotBtn.addEventListener('click', async function() {
+                // Get form data
+                const type = document.getElementById('type').value;
+                const host = document.getElementById('host').value;
+                const port = document.getElementById('port').value;
+                const user = document.getElementById('user').value;
+                const pass = document.getElementById('pass').value;
+                const channel = document.getElementById('channel').value;
+                
+                // Update UI
+                snapshotStatus.classList.remove('hidden', 'success', 'error');
+                snapshotStatus.textContent = 'Taking snapshot...';
+                snapshotContainer.classList.add('hidden');
+                
+                try {
+                    const response = await fetch('/api/snapshot', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ type, host, port, user, pass, channel })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        snapshotStatus.textContent = data.message;
+                        snapshotStatus.classList.add('success');
+                        
+                        // Display snapshot
+                        snapshotImage.src = data.imagePath + '?t=' + new Date().getTime();
+                        snapshotContainer.classList.remove('hidden');
+                    } else {
+                        snapshotStatus.textContent = data.message;
+                        snapshotStatus.classList.add('error');
+                    }
+                } catch (error) {
+                    snapshotStatus.textContent = 'Error: ' + error.message;
+                    snapshotStatus.classList.add('error');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
