@@ -12,7 +12,7 @@ const execAsync = promisify(exec);
 // Thông tin kết nối camera
 const CAMERA_HOST = 'huannv112.ddns.net';
 const CAMERA_USER = 'admin';
-const CAMERA_PASS = 'admin123';
+const CAMERA_PASS = 'Admin@123'; // Thử với mật khẩu phức tạp hơn
 const CAMERA_PORT = 80;
 const RTSP_PORT = 554;
 

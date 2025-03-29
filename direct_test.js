@@ -8,7 +8,7 @@ const crypto = require('crypto');
 const CAMERA_HOST = 'huannv112.ddns.net';
 const CAMERA_PORT = 80;
 const CAMERA_USER = 'admin';
-const CAMERA_PASS = 'admin123';
+const CAMERA_PASS = 'Admin@123'; // Thử với mật khẩu phức tạp hơn
 
 // URL cần kiểm tra
 const BASE_URL = `http://${CAMERA_HOST}:${CAMERA_PORT}`;
