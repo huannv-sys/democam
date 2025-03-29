@@ -259,7 +259,39 @@ app.post('/api/start-stream', (req, res) => {
     if (type === "hikvision") {
       rtspUrl = `rtsp://${user}:${pass}@${host}:554/ISAPI/Streaming/channels/${channel}/`;
     } else if (type === "dahua") {
-      rtspUrl = `rtsp://${user}:${pass}@${host}:554/cam/realmonitor?channel=${channel}&subtype=0`;
+      // Xử lý định dạng kênh cho Dahua
+      let channelNumber = "1";
+      let subtype = "0"; // 0 = main stream, 1 = sub stream
+      
+      if (channel === "1") {
+        // Kênh cơ bản
+        channelNumber = "1";
+        subtype = "0";
+      } else if (channel === "101") {
+        // Kênh 1, luồng chính
+        channelNumber = "1";
+        subtype = "0";
+      } else if (channel === "102") {
+        // Kênh 1, luồng phụ
+        channelNumber = "1";
+        subtype = "1";
+      } else if (channel === "201") {
+        // Kênh 2, luồng chính
+        channelNumber = "2";
+        subtype = "0";
+      } else if (channel === "202") {
+        // Kênh 2, luồng phụ
+        channelNumber = "2";
+        subtype = "1";
+      } else {
+        // Mặc định là kênh 1, luồng chính
+        console.log(`Không nhận diện được định dạng kênh: ${channel}, sử dụng mặc định (kênh 1)`);
+        channelNumber = "1";
+        subtype = "0";
+      }
+      
+      rtspUrl = `rtsp://${user}:${pass}@${host}:554/cam/realmonitor?channel=${channelNumber}&subtype=${subtype}`;
+      console.log(`Đã tạo URL RTSP cho Dahua: ${rtspUrl}`);
     } else {
       return res.status(400).json({ 
         success: false, 
@@ -282,7 +314,9 @@ app.post('/api/start-stream', (req, res) => {
         ffmpegOptions: {
           '-stats': '',
           '-r': 30,
-          '-q:v': 3
+          '-q:v': 3,
+          '-rtsp_transport': 'tcp',  // Sử dụng TCP thay vì UDP để truyền dữ liệu ổn định hơn
+          '-stimeout': '15000000'     // Timeout cho RTSP (microseconds)
         }
       });
       
