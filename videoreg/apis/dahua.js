@@ -1,3 +1,4 @@
+const axios = require("axios");
 const axios_digest = require("@mhoc/axios-digest-auth");
 const https = require('https');
 
@@ -258,12 +259,20 @@ dahua.prototype.picture = async function(channel_id) {
   
   console.log(`Thử lấy snapshot cho kênh ${channelNumber}`);
   
-  // Thử lần lượt các đường dẫn snapshot
+  // Thử lần lượt các đường dẫn snapshot dựa theo tài liệu API của Dahua
   const paths = [
     `/cgi-bin/snapshot.cgi?channel=${channelNumber}`,
+    `/snapshot.cgi?channel=${channelNumber}`,
     `/cgi-bin/snapshot.cgi`,
+    `/snapshot.cgi`,
     `/cgi-bin/getSnapshot.cgi?channel=${channelNumber}`,
-    `/cgi-bin/getSnapshot.cgi`
+    `/getSnapshot.cgi?channel=${channelNumber}`,
+    `/cgi-bin/image.cgi`,
+    `/cgi-bin/images.cgi`,
+    // Mẫu đường dẫn không tiêu chuẩn nhưng đôi khi hoạt động
+    `/ISAPI/Streaming/channels/${channelNumber}/picture`,
+    `/ISAPI/Streaming/channels/${channelNumber}01/picture`,  // Hikvision format
+    `/onvif-http/snapshot?channel=${channelNumber}`
   ];
   
   let lastError = null;
@@ -286,23 +295,50 @@ dahua.prototype.picture = async function(channel_id) {
       // Kiểm tra lỗi có trong response
       if (typeof response.data === "string" && 
          (response.data.indexOf("The requested URL was not found on this server") !== -1 || 
-          response.data.indexOf("404 File Not Found") !== -1)) {
-        console.log(`URL ${req_url} trả về lỗi 404`);
+          response.data.indexOf("404 File Not Found") !== -1 ||
+          response.data.indexOf("Error") !== -1 ||
+          response.data.indexOf("Bad Request") !== -1)) {
+        console.log(`URL ${req_url} trả về lỗi: ${response.data}`);
         continue; // Thử URL tiếp theo
       }
       
       // Kiểm tra xem có dữ liệu ảnh không
-      if (response.data && response.data.length > 0) {
+      if (response.data && response.data.length > 100) { // Đảm bảo kích thước tối thiểu cho hình ảnh
         console.log(`Đã lấy ảnh thành công từ ${req_url}, kích thước: ${response.data.length} bytes`);
         return response.data;
       }
       
-      console.log(`Không nhận được dữ liệu hình ảnh từ ${req_url}`);
+      console.log(`Không nhận được dữ liệu hình ảnh hoặc dữ liệu quá nhỏ từ ${req_url}`);
     } catch (error) {
       console.log(`Lỗi khi lấy snapshot từ ${path}: ${error.message || "Unknown error"}`);
       lastError = error;
       // Tiếp tục thử URL tiếp theo
     }
+  }
+  
+  // Thử thêm một phương pháp khác nếu tất cả đều thất bại
+  try {
+    console.log("Sử dụng phương pháp xác thực khác cho snapshot...");
+    const basicAuth = Buffer.from(`${this.USER}:${this.PASS}`).toString('base64');
+    const req_url = `${this.BASEURI}/cgi-bin/snapshot.cgi?channel=${channelNumber}`;
+    
+    const httpsAgent = this.PROTOCOL === "https" ? new https.Agent({ rejectUnauthorized: false }) : undefined;
+    const response = await axios.get(req_url, {
+      headers: {
+        'Authorization': `Basic ${basicAuth}`
+      },
+      httpsAgent,
+      responseType: 'arraybuffer',
+      timeout: 8000
+    });
+    
+    if (response.data && response.data.length > 100) {
+      console.log(`Đã lấy được ảnh với phương pháp Basic Auth, kích thước: ${response.data.length} bytes`);
+      return response.data;
+    }
+  } catch (error) {
+    console.log("Cả phương pháp Basic Auth cũng thất bại:", error.message);
+    // Tiếp tục với lỗi trước đó
   }
   
   // Nếu không URL nào thành công, ném ra lỗi

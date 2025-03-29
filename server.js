@@ -290,11 +290,22 @@ app.post('/api/start-stream', (req, res) => {
         subtype = "0";
       }
       
-      // Thử cả hai định dạng URL RTSP phổ biến cho camera Dahua
-      // Một số camera sử dụng /cam/realmonitor, một số khác sử dụng /cam/playback hoặc chỉ đơn giản là /h264
+      // Thử nhiều định dạng URL RTSP phổ biến cho camera Dahua dựa trên tài liệu API
+      // Mỗi loại camera có thể có các định dạng RTSP khác nhau
       const rtspUrls = [
+        // Định dạng Standard Dahua
         `rtsp://${user}:${pass}@${host}:554/cam/realmonitor?channel=${channelNumber}&subtype=${subtype}`,
-        `rtsp://${user}:${pass}@${host}:554/h264/ch${channelNumber}/${subtype}/av_stream`
+        
+        // Định dạng thay thế
+        `rtsp://${user}:${pass}@${host}:554/h264/ch${channelNumber}/${subtype}/av_stream`,
+        
+        // Định dạng thay thế khác
+        `rtsp://${user}:${pass}@${host}:554/live/ch${channelNumber}/${subtype}`,
+        `rtsp://${user}:${pass}@${host}:554/streaming/channels/${channelNumber}${subtype === "1" ? "02" : "01"}`,
+        
+        // Thử một số đường dẫn ONVIF/Thông dụng
+        `rtsp://${user}:${pass}@${host}:554/onvif${channelNumber}`,
+        `rtsp://${user}:${pass}@${host}:554/media/video${channelNumber}`
       ];
       
       // Sử dụng URL đầu tiên làm mặc định
@@ -340,32 +351,47 @@ app.post('/api/start-stream', (req, res) => {
         startError = error;
         console.error("Lỗi khi khởi tạo stream với URL chính:", error);
         
-        // Nếu lỗi và là camera Dahua, thử URL thứ hai
+        // Nếu lỗi và là camera Dahua, thử tất cả các URL dự phòng
         if (type === "dahua") {
-          try {
-            const backupRtspUrl = `rtsp://${user}:${pass}@${host}:554/h264/ch${channelNumber}/${subtype}/av_stream`;
-            console.log('Thử với URL dự phòng: ' + backupRtspUrl);
-            
-            stream = new Stream({
-              name: streamId,
-              streamUrl: backupRtspUrl,
-              wsPort: streamWsPort,
-              ffmpegPath: ffmpegPath,
-              ffmpegOptions: {
-                '-stats': '',
-                '-r': 20,
-                '-q:v': 5,
-                '-rtsp_transport': 'tcp',
-                '-stimeout': '15000000',
-                '-analyzeduration': '5000000',
-                '-probesize': '5000000'
-              }
-            });
-            
-            // Nếu không lỗi thì cập nhật URL đang sử dụng
-            rtspUrl = backupRtspUrl;
-          } catch (backupError) {
-            console.error("Cũng lỗi với URL dự phòng:", backupError);
+          let success = false;
+          
+          // Lặp qua tất cả các URL dự phòng (bỏ qua URL đầu tiên vì đã thử)
+          for (let i = 1; i < rtspUrls.length; i++) {
+            try {
+              const backupRtspUrl = rtspUrls[i];
+              console.log(`Thử với URL dự phòng ${i}: ${backupRtspUrl}`);
+              
+              stream = new Stream({
+                name: streamId,
+                streamUrl: backupRtspUrl,
+                wsPort: streamWsPort,
+                ffmpegPath: ffmpegPath,
+                ffmpegOptions: {
+                  '-stats': '',
+                  '-r': 15,                   // Giảm framerate thêm nữa
+                  '-q:v': 7,                  // Giảm chất lượng hơn nữa
+                  '-rtsp_transport': 'tcp',   // Sử dụng TCP 
+                  '-stimeout': '15000000',    // 15 seconds in microseconds
+                  '-analyzeduration': '5000000',
+                  '-probesize': '5000000',
+                  '-threads': '2'             // Giới hạn số luồng
+                }
+              });
+              
+              // Nếu không lỗi thì cập nhật URL đang sử dụng và thoát khỏi vòng lặp
+              rtspUrl = backupRtspUrl;
+              success = true;
+              console.log(`Đã khởi tạo stream thành công với URL: ${rtspUrl}`);
+              break;
+            } catch (backupError) {
+              console.error(`Lỗi với URL dự phòng ${i}:`, backupError.message);
+              // Tiếp tục thử URL tiếp theo
+            }
+          }
+          
+          // Nếu không có URL nào thành công
+          if (!success) {
+            console.error("Tất cả các URL RTSP đều thất bại");
             throw startError; // Ném lỗi ban đầu
           }
         } else {
