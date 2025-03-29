@@ -9,11 +9,16 @@ const dahua = require("./videoreg/apis/dahua");
 const hikvision = require("./videoreg/apis/hikvision");
 const { exec } = require('child_process');
 const Stream = require('node-rtsp-stream');
+const ffmpegStatic = require('ffmpeg-static');
 
 const app = express();
 const server = http.createServer(app);
 const io = new WebSocketServer(server);
 const port = 5000;
+
+// Đường dẫn đến ffmpeg
+const ffmpegPath = '/nix/store/3zc5jbvqzrn8zmva4fx5p0nh4yy03wk4-ffmpeg-6.1.1-bin/bin/ffmpeg';
+console.log('FFMPEG path:', ffmpegPath);
 
 // Lưu trữ các stream đang active
 const activeStreams = {};
@@ -225,6 +230,7 @@ app.post('/api/start-stream', (req, res) => {
         name: streamId,
         streamUrl: rtspUrl,
         wsPort: streamWsPort,
+        ffmpegPath: ffmpegPath,
         ffmpegOptions: {
           '-stats': '',
           '-r': 30,
