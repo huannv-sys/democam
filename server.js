@@ -108,22 +108,62 @@ app.post('/api/snapshot', async (req, res) => {
       });
     }
 
-    // Lấy snapshot
-    const channelId = channel || "101"; // Default channel
-    const image = await camera.picture(channelId);
-    
-    // Lưu snapshot ra file với tên duy nhất
-    const timestamp = new Date().getTime();
-    const filename = `${type}_${host.replace(/\./g, '_')}_${timestamp}.jpg`;
-    const filePath = path.join('./public/snapshots', filename);
-    
-    fs.writeFileSync(filePath, image);
-    
-    return res.json({
-      success: true,
-      message: "Đã lấy snapshot thành công",
-      imagePath: `/snapshots/${filename}`
-    });
+    try {
+      // Thử nhiều định dạng kênh khác nhau
+      const channelId = channel || "101"; // Default channel
+      
+      console.log(`Đang thử lấy ảnh với kênh ${channelId}...`);
+      const image = await camera.picture(channelId);
+      
+      if (!image || (image instanceof Buffer && image.length === 0)) {
+        throw new Error("Received empty image data");
+      }
+      
+      // Lưu snapshot ra file với tên duy nhất
+      const timestamp = new Date().getTime();
+      const filename = `${type}_${host.replace(/\./g, '_')}_${timestamp}.jpg`;
+      const filePath = path.join('./public/snapshots', filename);
+      
+      fs.writeFileSync(filePath, image);
+      
+      return res.json({
+        success: true,
+        message: "Đã lấy snapshot thành công",
+        imagePath: `/snapshots/${filename}`
+      });
+    } catch (error) {
+      console.error("Lỗi chi tiết khi lấy snapshot:", error);
+      
+      // Nếu thử kênh đầu tiên không thành công, thử các kênh khác
+      if (channel === "101" || !channel) {
+        try {
+          console.log("Thử lại với kênh 1...");
+          const image = await camera.picture("1");
+          
+          if (!image || (image instanceof Buffer && image.length === 0)) {
+            throw new Error("Received empty image data");
+          }
+          
+          // Lưu snapshot ra file
+          const timestamp = new Date().getTime();
+          const filename = `${type}_${host.replace(/\./g, '_')}_${timestamp}.jpg`;
+          const filePath = path.join('./public/snapshots', filename);
+          
+          fs.writeFileSync(filePath, image);
+          
+          return res.json({
+            success: true,
+            message: "Đã lấy snapshot thành công với kênh 1",
+            imagePath: `/snapshots/${filename}`
+          });
+        } catch (secondError) {
+          console.error("Cũng không lấy được ảnh với kênh 1:", secondError);
+          throw error; // Throw lỗi ban đầu
+        }
+      } else {
+        throw error;
+      }
+    }
   } catch (error) {
     console.error("Lỗi khi lấy snapshot từ camera:", error);
     return res.status(500).json({
