@@ -1,0 +1,35 @@
+{
+  "server": {
+    "port": 5000,
+    "host": "0.0.0.0"
+  },
+  "camera": {
+    "connectTimeout": 8000,
+    "retryAttempts": 3,
+    "snapshotRefreshRate": 30000
+  },
+  "analytics": {
+    "enabled": true,
+    "scheduleInterval": "*/5 * * * *",
+    "defaultOptions": {
+      "detectPersons": true,
+      "detectFaces": false,
+      "detectLicensePlates": false,
+      "detectObjects": true
+    }
+  },
+  "storage": {
+    "snapshotDir": "./public/snapshots",
+    "analyticsDir": "./public/analytics",
+    "logDir": "./logs",
+    "retentionDays": 30
+  },
+  "stream": {
+    "portRange": {
+      "start": 9000,
+      "end": 9999
+    },
+    "ffmpegPath": "/usr/bin/ffmpeg",
+    "enableVLC": true
+  }
+}

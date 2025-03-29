@@ -50,29 +50,22 @@ class AIManager {
       // Phân tích dựa trên tùy chọn
       if (options.detectPersons) {
         try {
-          // Mô phỏng phát hiện người (tạm thời trước khi tích hợp DeepStack thật)
+          // Sử dụng YOLO để phát hiện người
+          const yoloResults = await this.yolo.detect(imageData, cameraId);
+          
+          // Phân loại kết quả
+          const categorized = this.yolo.categorizeDetections(yoloResults);
+          
+          // Gán kết quả phát hiện người
           results.persons = {
             timestamp: new Date().toISOString(),
             cameraId,
-            personCount: Math.floor(Math.random() * 3),
-            persons: []
+            personCount: categorized.personCount,
+            persons: categorized.persons.map(p => ({
+              confidence: p.confidence,
+              boundingBox: p.boundingBox
+            }))
           };
-          
-          // Thêm kết quả mô phỏng
-          for (let i = 0; i < results.persons.personCount; i++) {
-            results.persons.persons.push({
-              confidence: 0.85 + (Math.random() * 0.1),
-              boundingBox: {
-                x_min: 20 + Math.floor(Math.random() * 30),
-                y_min: 30 + Math.floor(Math.random() * 40),
-                x_max: 70 + Math.floor(Math.random() * 20),
-                y_max: 90 + Math.floor(Math.random() * 10)
-              }
-            });
-          }
-          
-          // Thực tế sẽ sử dụng code này khi tích hợp DeepStack:
-          // results.persons = await this.deepstack.detectPersons(imageData, cameraId);
         } catch (err) {
           console.error('Lỗi khi phát hiện người:', err);
           results.errors = results.errors || {};
@@ -153,34 +146,25 @@ class AIManager {
       
       if (options.detectObjects) {
         try {
-          // Mô phỏng phát hiện đối tượng
-          const objectLabels = ['Xe hơi', 'Xe máy', 'Chó', 'Mèo', 'Túi xách', 'Điện thoại'];
+          // Sử dụng YOLO để phát hiện đối tượng
+          const yoloResults = await this.yolo.detect(imageData, cameraId);
+          
+          // Phân loại kết quả
+          const categorized = this.yolo.categorizeDetections(yoloResults);
+          
+          // Kết hợp tất cả đối tượng (xe cộ và đối tượng khác)
+          const allObjects = [...categorized.vehicles, ...categorized.others];
           
           results.objects = {
             timestamp: new Date().toISOString(),
             cameraId,
-            objectCount: Math.floor(Math.random() * 3),
-            objects: []
+            objectCount: allObjects.length,
+            objects: allObjects.map(obj => ({
+              label: obj.class,
+              confidence: obj.confidence,
+              boundingBox: obj.boundingBox
+            }))
           };
-          
-          // Thêm kết quả mô phỏng
-          for (let i = 0; i < results.objects.objectCount; i++) {
-            results.objects.objects.push({
-              label: objectLabels[Math.floor(Math.random() * objectLabels.length)],
-              confidence: 0.70 + (Math.random() * 0.25),
-              boundingBox: {
-                x_min: 10 + Math.floor(Math.random() * 40),
-                y_min: 20 + Math.floor(Math.random() * 40),
-                x_max: 60 + Math.floor(Math.random() * 30),
-                y_max: 70 + Math.floor(Math.random() * 20)
-              }
-            });
-          }
-          
-          // Thực tế sẽ sử dụng code này khi tích hợp DeepStack:
-          // results.objects = await this.deepstack.detectObjects(imageData, cameraId, {
-          //   targetObjects: options.targetObjects || null
-          // });
         } catch (err) {
           console.error('Lỗi khi phát hiện đối tượng:', err);
           results.errors = results.errors || {};
