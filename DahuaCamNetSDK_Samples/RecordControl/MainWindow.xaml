@@ -1,0 +1,27 @@
+﻿<Window x:Class="RecordControl.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:winForms="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
+        xmlns:local="clr-namespace:RecordControl"
+        mc:Ignorable="d"
+        Title="DahuaCamera" Height="450" Width="800" WindowStartupLocation="CenterScreen">
+    <Viewbox Stretch="Uniform">    
+        <Grid>
+            
+        <TextBox x:Name="MW_txtbx_IP" HorizontalAlignment="Left" Margin="62,61,0,0" TextWrapping="Wrap" Text="192.168.1.111" VerticalAlignment="Top" Width="120"/>
+        <Button x:Name="MW_btn_Login" Content="Login" HorizontalAlignment="Left" Margin="24,94,0,0" VerticalAlignment="Top" Height="37" Width="83" Click="MW_btn_Login_Click"/>
+        <Button x:Name="MW_btn_Logout" Content="Logout" HorizontalAlignment="Left" Margin="155,94,0,0" VerticalAlignment="Top" Height="37" Width="83" Click="MW_btn_Logout_Click"/>
+        <Button x:Name="MW_btn_OpenRealPlay" Content="开启预览" HorizontalAlignment="Left" Margin="47,218,0,0" VerticalAlignment="Top" Height="30" Width="60" Click="MW_btn_OpenRealPlay_Click"/>
+        <Button x:Name="MW_btn_StopRealPlay" Content="停止预览" HorizontalAlignment="Left" Margin="155,218,0,0" VerticalAlignment="Top" Height="30" Width="60" Click="MW_btn_StopRealPlay_Click" IsEnabled="False"/>
+        <WindowsFormsHost x:Name="MW_wfh_VideoPanel" HorizontalAlignment="Left" Height="304" Margin="243,61,0,0" VerticalAlignment="Top" Width="537" Grid.ColumnSpan="2">
+            <winForms:Panel x:Name="videoPanel" Visible="False"/>
+        </WindowsFormsHost>
+        <Button x:Name="MW_btn_Record" Content="开始录制" HorizontalAlignment="Left" Margin="47,290,0,0" VerticalAlignment="Top" Height="30" Width="60" Click="MW_btn_Record_Click"/>
+        <Button x:Name="MW_btn_StopRecord" Content="停止录制" HorizontalAlignment="Left" Margin="155,290,0,0" VerticalAlignment="Top" Height="30" Width="60" Click="MW_btn_StopRecord_Click" IsEnabled="False"/>
+        <Label x:Name="MW_lbl_ConvertStatus" Content="" HorizontalAlignment="Left" Margin="47,348,0,0" VerticalAlignment="Top" Height="53" Width="168" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+
+        </Grid>
+    </Viewbox>
+</Window>

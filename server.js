@@ -290,8 +290,17 @@ app.post('/api/start-stream', (req, res) => {
         subtype = "0";
       }
       
-      rtspUrl = `rtsp://${user}:${pass}@${host}:554/cam/realmonitor?channel=${channelNumber}&subtype=${subtype}`;
-      console.log(`Đã tạo URL RTSP cho Dahua: ${rtspUrl}`);
+      // Thử cả hai định dạng URL RTSP phổ biến cho camera Dahua
+      // Một số camera sử dụng /cam/realmonitor, một số khác sử dụng /cam/playback hoặc chỉ đơn giản là /h264
+      const rtspUrls = [
+        `rtsp://${user}:${pass}@${host}:554/cam/realmonitor?channel=${channelNumber}&subtype=${subtype}`,
+        `rtsp://${user}:${pass}@${host}:554/h264/ch${channelNumber}/${subtype}/av_stream`
+      ];
+      
+      // Sử dụng URL đầu tiên làm mặc định
+      rtspUrl = rtspUrls[0];
+      console.log(`Đã tạo URL RTSP chính cho Dahua: ${rtspUrl}`);
+      console.log(`URL RTSP dự phòng: ${rtspUrls[1]}`);
     } else {
       return res.status(400).json({ 
         success: false, 
@@ -306,19 +315,63 @@ app.post('/api/start-stream', (req, res) => {
     
     // Khởi tạo stream
     try {
-      const stream = new Stream({
-        name: streamId,
-        streamUrl: rtspUrl,
-        wsPort: streamWsPort,
-        ffmpegPath: ffmpegPath,
-        ffmpegOptions: {
-          '-stats': '',
-          '-r': 30,
-          '-q:v': 3,
-          '-rtsp_transport': 'tcp',  // Sử dụng TCP thay vì UDP để truyền dữ liệu ổn định hơn
-          '-stimeout': '15000000'     // Timeout cho RTSP (microseconds)
+      // Thử khởi tạo stream với URL đầu tiên
+      let stream;
+      let startError;
+      
+      try {
+        console.log('Khởi tạo stream với URL: ' + rtspUrl);
+        stream = new Stream({
+          name: streamId,
+          streamUrl: rtspUrl,
+          wsPort: streamWsPort,
+          ffmpegPath: ffmpegPath,
+          ffmpegOptions: {
+            '-stats': '',
+            '-r': 20,  // Giảm framerate để ổn định hơn
+            '-q:v': 5,  // Giảm chất lượng để truyền dễ hơn
+            '-rtsp_transport': 'tcp',  // Sử dụng TCP thay vì UDP để truyền dữ liệu ổn định hơn
+            '-stimeout': '15000000',   // Timeout cho RTSP (microseconds)
+            '-analyzeduration': '5000000',  // Tăng thời gian phân tích
+            '-probesize': '5000000'    // Tăng kích thước probe
+          }
+        });
+      } catch (error) {
+        startError = error;
+        console.error("Lỗi khi khởi tạo stream với URL chính:", error);
+        
+        // Nếu lỗi và là camera Dahua, thử URL thứ hai
+        if (type === "dahua") {
+          try {
+            const backupRtspUrl = `rtsp://${user}:${pass}@${host}:554/h264/ch${channelNumber}/${subtype}/av_stream`;
+            console.log('Thử với URL dự phòng: ' + backupRtspUrl);
+            
+            stream = new Stream({
+              name: streamId,
+              streamUrl: backupRtspUrl,
+              wsPort: streamWsPort,
+              ffmpegPath: ffmpegPath,
+              ffmpegOptions: {
+                '-stats': '',
+                '-r': 20,
+                '-q:v': 5,
+                '-rtsp_transport': 'tcp',
+                '-stimeout': '15000000',
+                '-analyzeduration': '5000000',
+                '-probesize': '5000000'
+              }
+            });
+            
+            // Nếu không lỗi thì cập nhật URL đang sử dụng
+            rtspUrl = backupRtspUrl;
+          } catch (backupError) {
+            console.error("Cũng lỗi với URL dự phòng:", backupError);
+            throw startError; // Ném lỗi ban đầu
+          }
+        } else {
+          throw error;
         }
-      });
+      }
       
       // Lưu stream vào danh sách active
       activeStreams[streamId] = {
